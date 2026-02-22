@@ -22,6 +22,11 @@ class UserLogin(BaseModel):
     password: str
 
 
+class GoogleLogin(BaseModel):
+    """Google OAuth 登入請求"""
+    id_token: str
+
+
 class UserResponse(BaseModel):
     """用戶資料回應"""
     id: str

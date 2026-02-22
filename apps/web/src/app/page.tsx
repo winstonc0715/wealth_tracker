@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { GoogleLogin } from '@react-oauth/google';
 import apiClient from '@/lib/api-client';
 
 export default function LoginPage() {
@@ -26,6 +27,21 @@ export default function LoginPage() {
                 await apiClient.login(email, password);
             }
             router.push('/dashboard');
+        } catch (err) {
+            setError((err as Error).message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleGoogleSuccess = async (credentialResponse: any) => {
+        setError('');
+        setLoading(true);
+        try {
+            if (credentialResponse.credential) {
+                await apiClient.googleLogin(credentialResponse.credential);
+                router.push('/dashboard');
+            }
         } catch (err) {
             setError((err as Error).message);
         } finally {
@@ -162,7 +178,7 @@ export default function LoginPage() {
                             className="input-field"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            required
+                            required={!loading}
                             minLength={6}
                         />
                     </div>
@@ -195,6 +211,38 @@ export default function LoginPage() {
                         {loading ? '處理中...' : isRegister ? '建立帳號' : '登入'}
                     </button>
                 </form>
+
+                {/* 分隔線 */}
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    margin: '24px 0',
+                    gap: '12px',
+                    color: 'var(--color-text-muted)',
+                    fontSize: '0.85rem',
+                }}>
+                    <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }} />
+                    或使用第三方帳號
+                    <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }} />
+                </div>
+
+                {/* Google 登入 */}
+                <div style={{
+                    display: 'flex',
+                    justifyContent: 'center',
+                    marginTop: '8px',
+                    opacity: loading ? 0.6 : 1,
+                    pointerEvents: loading ? 'none' : 'auto',
+                }}>
+                    <GoogleLogin
+                        onSuccess={handleGoogleSuccess}
+                        onError={() => setError('Google 登入失敗')}
+                        theme="filled_blue"
+                        shape="pill"
+                        size="large"
+                        width="300px"
+                    />
+                </div>
             </div>
         </div>
     );

@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 1440  # 24 小時
     admin_emails: str = "demo@wealth.com"  # 逗號分隔的管理員 Email 清單
+    google_client_id: str = ""  # Google OAuth Client ID
 
     # === 資料庫 ===
     # 預設使用 SQLite（開發模式），生產環境切換為 PostgreSQL

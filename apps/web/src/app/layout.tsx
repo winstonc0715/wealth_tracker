@@ -1,10 +1,13 @@
 import type { Metadata } from 'next';
+import { GoogleOAuthProvider } from '@react-oauth/google';
 import './globals.css';
 
 export const metadata: Metadata = {
     title: 'WealthTracker - 跨平台資產管理系統',
     description: '追蹤台股、美股、加密貨幣，即時淨值計算與資產配置分析',
 };
+
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
 
 export default function RootLayout({
     children,
@@ -19,7 +22,11 @@ export default function RootLayout({
                     rel="stylesheet"
                 />
             </head>
-            <body>{children}</body>
+            <body>
+                <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+                    {children}
+                </GoogleOAuthProvider>
+            </body>
         </html>
     );
 }

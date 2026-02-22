@@ -17,7 +17,10 @@ from app.config import get_settings
 from app.database import get_db
 from app.models.user import User
 from app.schemas.common import ApiResponse
-from app.schemas.user import UserRegister, UserLogin, UserResponse, TokenResponse
+from app.schemas.user import UserRegister, UserLogin, GoogleLogin, UserResponse, TokenResponse
+
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["認證"])
@@ -81,7 +84,20 @@ async def login(data: UserLogin, db: AsyncSession = Depends(get_db)):
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
 
-    if not user or not pwd_context.verify(data.password, user.hashed_password):
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Email 或密碼錯誤",
+        )
+
+    # 如果用戶是透過 Google 註冊且未設定密碼
+    if user.google_id and not user.hashed_password:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="此帳號已綁定 Google 登入，請使用 Google 登入或設定密碼後再試",
+        )
+
+    if not pwd_context.verify(data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email 或密碼錯誤",
@@ -94,6 +110,69 @@ async def login(data: UserLogin, db: AsyncSession = Depends(get_db)):
             expires_in=settings.jwt_expire_minutes * 60,
         )
     )
+
+
+@router.post("/google", response_model=ApiResponse[TokenResponse])
+async def google_login(data: GoogleLogin, db: AsyncSession = Depends(get_db)):
+    """Google OAuth 登入"""
+    try:
+        # 驗證 Google ID Token
+        # 注意：在生產環境中需正確設定 CLIENT_ID，目前先不強制檢查以利開發調試
+        # 若有設定 GOOGLE_CLIENT_ID 環境變數則會進行驗證
+        idinfo = id_token.verify_oauth2_token(
+            data.id_token, google_requests.Request(), settings.google_client_id
+        )
+
+        google_id = idinfo["sub"]
+        email = idinfo["email"]
+        name = idinfo.get("name", email.split("@")[0])
+
+        # 1. 嘗試透過 google_id 查找
+        stmt = select(User).where(User.google_id == google_id)
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
+
+        if not user:
+            # 2. 嘗試透過 email 查找（處理先前已註冊但未綁定 Google 的用戶）
+            stmt = select(User).where(User.email == email)
+            result = await db.execute(stmt)
+            user = result.scalar_one_or_none()
+
+            if user:
+                # 綁定 Google ID
+                user.google_id = google_id
+            else:
+                # 3. 建立新用戶
+                user = User(
+                    email=email,
+                    username=name,
+                    google_id=google_id,
+                    hashed_password=None, # 第三方登入暫不設密碼
+                )
+                db.add(user)
+
+            await db.flush()
+            await db.refresh(user)
+
+        token = _create_token(user.id)
+        return ApiResponse(
+            data=TokenResponse(
+                access_token=token,
+                expires_in=settings.jwt_expire_minutes * 60,
+            )
+        )
+
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Google Token 驗證失敗",
+        )
+    except Exception as e:
+        logger.error(f"Google 登入失敗: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="系統處理 Google 登入時出錯",
+        )
 
 
 # === 依賴注入：取得當前用戶 ===

@@ -109,6 +109,21 @@ class ApiClient {
         return result;
     }
 
+    async googleLogin(idToken: string) {
+        const result = await this.request<{
+            access_token: string;
+            token_type: string;
+            expires_in: number;
+        }>('/auth/google', {
+            method: 'POST',
+            body: JSON.stringify({ id_token: idToken }),
+        });
+        if (result.data?.access_token) {
+            this.setToken(result.data.access_token);
+        }
+        return result;
+    }
+
     // === Portfolio ===
     async getPortfolios() {
         return this.request<Portfolio[]>('/portfolio/');
