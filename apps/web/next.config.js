@@ -17,6 +17,17 @@ const nextConfig = {
             },
         ]
     },
+
+    // 路由重新導向
+    async redirects() {
+        return [
+            {
+                source: '/login',
+                destination: '/',
+                permanent: true,
+            },
+        ]
+    },
 };
 
 module.exports = nextConfig;

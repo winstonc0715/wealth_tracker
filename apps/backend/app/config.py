@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     cors_origins: list[str] = [
         "http://localhost:3000",
         "http://localhost:8081",
+        "https://wealth-tracker-web-brown.vercel.app",
+        "https://wealthtracker-web.vercel.app",
     ]
 
     model_config = {

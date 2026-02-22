@@ -72,7 +72,7 @@ class ApiClient {
         if (response.status === 401) {
             this.clearToken();
             if (typeof window !== 'undefined') {
-                window.location.href = '/login';
+                window.location.href = '/';
             }
             throw new Error('認證已過期，請重新登入');
         }
