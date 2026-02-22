@@ -1,0 +1,25 @@
+import type { Metadata } from 'next';
+import './globals.css';
+
+export const metadata: Metadata = {
+    title: 'WealthTracker - 跨平台資產管理系統',
+    description: '追蹤台股、美股、加密貨幣，即時淨值計算與資產配置分析',
+};
+
+export default function RootLayout({
+    children,
+}: {
+    children: React.ReactNode;
+}) {
+    return (
+        <html lang="zh-Hant">
+            <head>
+                <link
+                    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+                    rel="stylesheet"
+                />
+            </head>
+            <body>{children}</body>
+        </html>
+    );
+}

@@ -1,0 +1,43 @@
+# WealthTracker Backend Dependencies
+
+# === Web Framework ===
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+
+# === Database ===
+sqlalchemy[asyncio]>=2.0.0
+aiosqlite>=0.20.0       # SQLite async driver（開發模式）
+asyncpg>=0.30.0         # PostgreSQL async driver（生產環境）
+alembic>=1.14.0
+
+# === Redis ===
+redis>=5.0.0
+
+# === Auth ===
+pyjwt>=2.9.0
+passlib[bcrypt]>=1.7.0
+python-multipart>=0.0.9
+bcrypt==4.0.1
+
+# === Settings ===
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+email-validator>=2.0.0
+
+# === Async ===
+greenlet>=3.0.0
+
+# === HTTP Client ===
+httpx>=0.27.0
+
+# === Price Providers ===
+yfinance>=0.2.40
+twstock>=1.3.1
+
+# === Utils ===
+# === Utils ===
+python-dotenv>=1.0.0
+
+# === Scheduler ===
+apscheduler>=3.10.4
+lxml

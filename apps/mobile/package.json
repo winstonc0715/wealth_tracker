@@ -1,0 +1,32 @@
+{
+    "name": "wealth-tracker-mobile",
+    "version": "0.1.0",
+    "private": true,
+    "main": "expo-router/entry",
+    "scripts": {
+        "dev": "expo start",
+        "build": "expo export",
+        "lint": "eslint ."
+    },
+    "dependencies": {
+        "expo": "~52.0.0",
+        "expo-router": "~4.0.0",
+        "expo-status-bar": "~2.0.0",
+        "expo-font": "~13.0.0",
+        "expo-splash-screen": "~0.29.0",
+        "react": "^19.0.0",
+        "react-native": "0.76.0",
+        "react-native-web": "~0.19.0",
+        "react-native-safe-area-context": "~5.0.0",
+        "react-native-screens": "~4.0.0",
+        "react-native-chart-kit": "^6.12.0",
+        "react-native-svg": "~15.0.0",
+        "@expo/vector-icons": "^14.0.0",
+        "zustand": "^5.0.0",
+        "@react-native-async-storage/async-storage": "~2.0.0"
+    },
+    "devDependencies": {
+        "@types/react": "^19.0.0",
+        "typescript": "^5.7.0"
+    }
+}

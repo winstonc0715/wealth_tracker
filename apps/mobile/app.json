@@ -1,0 +1,28 @@
+{
+    "expo": {
+        "name": "WealthTracker",
+        "slug": "wealth-tracker",
+        "version": "0.1.0",
+        "orientation": "portrait",
+        "icon": "./assets/icon.png",
+        "userInterfaceStyle": "dark",
+        "scheme": "wealthtracker",
+        "splash": {
+            "backgroundColor": "#0a0a1a"
+        },
+        "ios": {
+            "supportsTablet": true,
+            "bundleIdentifier": "com.wealthtracker.app"
+        },
+        "android": {
+            "adaptiveIcon": {
+                "backgroundColor": "#0a0a1a"
+            },
+            "package": "com.wealthtracker.app"
+        },
+        "plugins": [
+            "expo-router",
+            "expo-font"
+        ]
+    }
+}
