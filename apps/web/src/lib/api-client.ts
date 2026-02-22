@@ -4,7 +4,23 @@
  * 統一處理 API 請求、Token 驗證與錯誤處理。
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+const getApiBase = () => {
+    let url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+    // 確保路徑以 /api 結尾，且不重複
+    if (url.includes('railway.app') && !url.endsWith('/api')) {
+        url = url.replace(/\/$/, '') + '/api';
+    }
+    return url;
+};
+
+const API_BASE = getApiBase();
+
+if (typeof window !== 'undefined') {
+    console.log('[WealthTracker] API_BASE configuration:', {
+        env: process.env.NEXT_PUBLIC_API_URL,
+        computed: API_BASE
+    });
+}
 
 interface ApiResponse<T> {
     success: boolean;
