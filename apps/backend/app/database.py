@@ -34,7 +34,12 @@ else:
         "pool_pre_ping": True,
     })
 
-engine = create_async_engine(settings.database_url, **_engine_kwargs)
+# 自動轉換資料庫 URL 為非同步驅動程式
+_db_url = settings.database_url
+if _db_url.startswith("postgresql://"):
+    _db_url = _db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+engine = create_async_engine(_db_url, **_engine_kwargs)
 
 async_session = async_sessionmaker(
     engine,
