@@ -68,13 +68,13 @@ async def create_portfolio(
 @router.get("/search", response_model=ApiResponse[list[dict]])
 async def search_symbols(
     query: str,
-    category_slug: str,
+    category_slug: str = "all",
     user: User = Depends(get_current_user),
 ):
     """
     即時搜尋標的代碼與名稱
     
-    支援依據資產類別 (us_stock, tw_stock, crypto 等) 進行即時模糊搜尋。
+    支援依據資產類別 (us_stock, tw_stock, crypto 等) 進行即時模糊搜尋。若傳入 'all' 則會並行查詢所有支援的類別。
     """
     manager = PriceManager()
     try:
@@ -86,7 +86,8 @@ async def search_symbols(
                 "name": r.name,
                 "type_box": r.type_box,
                 "exchange": r.exchange,
-                "currency": r.currency
+                "currency": r.currency,
+                "category_slug": getattr(r, 'category_slug', category_slug)
             } for r in results
         ])
     except Exception as e:

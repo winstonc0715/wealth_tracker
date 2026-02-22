@@ -40,6 +40,7 @@ export interface SearchResult {
     type_box: string | null;
     exchange: string | null;
     currency: string | null;
+    category_slug?: string;
 }
 
 class ApiClient {
@@ -168,7 +169,7 @@ class ApiClient {
         return this.request<Record<string, number>>('/portfolio/exchange-rates');
     }
 
-    async searchSymbols(query: string, category_slug: string) {
+    async searchSymbols(query: string, category_slug: string = 'all') {
         return this.request<SearchResult[]>(`/portfolio/search?query=${encodeURIComponent(query)}&category_slug=${encodeURIComponent(category_slug)}`);
     }
 

@@ -30,6 +30,7 @@ class SearchResult:
     type_box: str | None = None  # 例如 "ETF", "Equity", "Crypto"
     exchange: str | None = None  # 例如 "TWSE", "NASDAQ"
     currency: str | None = None
+    category_slug: str | None = None  # 自動判斷的資產類別
 
 
 @dataclass

@@ -166,27 +166,63 @@ class PriceManager:
 
         return results
 
-    async def search_symbol(self, query: str, category_slug: str) -> list[SearchResult]:
+    async def search_symbol(self, query: str, category_slug: str | None = None) -> list[SearchResult]:
         """
         搜尋標的
         
         Args:
             query: 搜尋關鍵字
-            category_slug: 資產類別
+            category_slug: 資產類別 (若為 "all" 或 None 則跨類別搜尋)
             
         Returns:
             SearchResult 列表
         """
-        provider_name = CATEGORY_PROVIDER_MAP.get(category_slug, "")
-        provider = self._providers.get(provider_name)
+        import asyncio
 
-        if not provider:
+        if category_slug and category_slug != "all":
+            provider_name = CATEGORY_PROVIDER_MAP.get(category_slug, "")
+            provider = self._providers.get(provider_name)
+            if not provider:
+                return []
+            if hasattr(provider, "search_symbol"):
+                results = await provider.search_symbol(query)
+                for r in results:
+                    r.category_slug = category_slug
+                return results
             return []
 
-        if hasattr(provider, "search_symbol"):
-            return await provider.search_symbol(query)
-            
-        return []
+        # 跨類別並行搜尋
+        tasks = []
+        enabled_slugs = ["tw_stock", "us_stock", "crypto"]
+        for slug in enabled_slugs:
+            provider_name = CATEGORY_PROVIDER_MAP.get(slug, "")
+            provider = self._providers.get(provider_name)
+            if provider and hasattr(provider, 'search_symbol'):
+                tasks.append(self._search_with_slug(provider, query, slug))
+        
+        if not tasks:
+            return []
+
+        all_results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        final_results = []
+        for res in all_results:
+            if isinstance(res, list):
+                final_results.extend(res)
+                
+        # 簡單排序：讓精確比對的排前面 (選做)
+        # return sorted(final_results, key=lambda x: 0 if x.symbol.upper() == query.upper() else 1)
+        return final_results
+
+    async def _search_with_slug(self, provider, query: str, slug: str) -> list[SearchResult]:
+        try:
+            results = await provider.search_symbol(query)
+            for r in results:
+                r.category_slug = slug
+            return results
+        except Exception as e:
+            logger.warning("搜尋 [%s] 失敗: %s", slug, e)
+            return []
 
     async def close(self):
         """關閉所有 Provider 的資源"""

@@ -71,16 +71,10 @@ export default function DashboardPage() {
             return;
         }
 
-        const categorySlug = CATEGORIES.find(c => c.id === categoryId)?.slug;
-        if (!categorySlug || !['tw_stock', 'us_stock', 'crypto'].includes(categorySlug)) {
-            setSearchResults([]);
-            return;
-        }
-
         const timer = setTimeout(async () => {
             setIsSearching(true);
             try {
-                const res = await apiClient.searchSymbols(symbol.trim(), categorySlug);
+                const res = await apiClient.searchSymbols(symbol.trim(), 'all');
                 setSearchResults(res.data || []);
             } catch (err) {
                 console.error("搜尋失敗", err);
@@ -91,7 +85,7 @@ export default function DashboardPage() {
         }, 300);
 
         return () => clearTimeout(timer);
-    }, [symbol, categoryId]);
+    }, [symbol]);
 
     useEffect(() => {
         if (!apiClient.isAuthenticated()) {
@@ -458,12 +452,21 @@ export default function DashboardPage() {
                                                         setSymbol(asset.symbol);
                                                         setAssetName(asset.name);
                                                         setShowSuggestions(false);
+                                                        // 自動切換資產類別
+                                                        let newCategoryId = categoryId;
+                                                        if (asset.category_slug) {
+                                                            const cat = CATEGORIES.find(c => c.slug === asset.category_slug);
+                                                            if (cat) {
+                                                                setCategoryId(cat.id);
+                                                                newCategoryId = cat.id;
+                                                            }
+                                                        }
                                                         // 智能切換預設幣別
                                                         if (asset.currency) {
                                                             setCurrency(asset.currency);
                                                         } else {
-                                                            if (categoryId === 2 || categoryId === 3) setCurrency('USD');
-                                                            if (categoryId === 1 || categoryId === 4 || categoryId === 5) setCurrency('TWD');
+                                                            if (newCategoryId === 2 || newCategoryId === 3) setCurrency('USD');
+                                                            if (newCategoryId === 1 || newCategoryId === 4 || newCategoryId === 5) setCurrency('TWD');
                                                         }
                                                     }}
                                                 >
