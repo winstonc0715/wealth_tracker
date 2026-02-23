@@ -155,6 +155,15 @@ class PortfolioService:
         """
         summary = await self.get_summary(portfolio_id, force_refresh)
 
+        # 取得 USD 匯率以統一轉為 TWD 計算
+        usd_twd_rate = Decimal("32.0")
+        try:
+            rate_data = await self.price_manager.get_price("TWD=X", "us_stock", force_refresh=force_refresh)
+            if rate_data.price > 0:
+                usd_twd_rate = rate_data.price
+        except Exception as e:
+            logger.warning("取得匯率失敗，使用預設值 32.0: %s", e)
+
         # 按類別聚合
         category_values: dict[str, Decimal] = {}
         category_names: dict[str, str] = {}
@@ -163,7 +172,12 @@ class PortfolioService:
             if pos.category_slug == "liability":
                 continue  # 負債不計入配置
             slug = pos.category_slug
-            category_values[slug] = category_values.get(slug, Decimal("0")) + pos.total_value
+            
+            # 使用 TWD 價值來加總比例
+            twd_multiplier = usd_twd_rate if slug in ("us_stock", "crypto") else Decimal("1")
+            value_twd = pos.total_value * twd_multiplier
+            
+            category_values[slug] = category_values.get(slug, Decimal("0")) + value_twd
 
             # 取得類別中文名
             if slug not in category_names:
