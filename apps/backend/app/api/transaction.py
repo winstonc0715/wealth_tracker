@@ -45,29 +45,38 @@ async def create_transaction(
         raise HTTPException(status_code=404, detail="投資組合不存在")
 
     service = TransactionService(db)
-    tx = await service.create_transaction(data)
-    await db.refresh(tx)
+    try:
+        tx = await service.create_transaction(data)
+        await db.commit()
+        await db.refresh(tx)
 
-    return ApiResponse(
-        data=TransactionResponse(
-            id=tx.id,
-            portfolio_id=tx.portfolio_id,
-            category_id=tx.category_id,
-            category_name=tx.category.name if tx.category else None,
-            symbol=tx.symbol,
-            asset_name=tx.asset_name,
-            tx_type=tx.tx_type,
-            quantity=tx.quantity,
-            unit_price=tx.unit_price,
-            fee=tx.fee,
-            currency=tx.currency,
-            executed_at=tx.executed_at,
-            note=tx.note,
-            realized_pnl=tx.realized_pnl,
-            created_at=tx.created_at,
-        ),
-        message="交易已新增",
-    )
+        return ApiResponse(
+            data=TransactionResponse(
+                id=tx.id,
+                portfolio_id=tx.portfolio_id,
+                category_id=tx.category_id,
+                category_name=tx.category.name if tx.category else None,
+                symbol=tx.symbol,
+                asset_name=tx.asset_name,
+                tx_type=tx.tx_type,
+                quantity=tx.quantity,
+                unit_price=tx.unit_price,
+                fee=tx.fee,
+                currency=tx.currency,
+                executed_at=tx.executed_at,
+                note=tx.note,
+                realized_pnl=tx.realized_pnl,
+                created_at=tx.created_at,
+            ),
+            message="交易已新增",
+        )
+    except ValueError as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        await db.rollback()
+        logger.exception("新增交易失敗")
+        raise HTTPException(status_code=500, detail=f"伺服器錯誤: {str(e)}")
 
 
 @router.get(
@@ -226,9 +235,15 @@ async def delete_transaction(
     service = TransactionService(db)
     try:
         await service.delete_transaction(tx_id)
+        await db.commit()
         return ApiResponse(data=True, message="交易已刪除，損益已重新計算")
     except ValueError as e:
+        await db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        await db.rollback()
+        logger.exception(f"刪除交易失敗: {tx_id}")
+        raise HTTPException(status_code=500, detail=f"伺服器錯誤: {str(e)}")
 
 # === 券商同步路由 ===
 
