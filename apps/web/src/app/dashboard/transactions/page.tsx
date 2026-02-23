@@ -160,7 +160,7 @@ export default function TransactionsPage() {
                                             {getTxTypeLabel(tx.tx_type)}
                                         </span>
                                     </td>
-                                    <td style={tdStyle}>{tx.quantity}</td>
+                                    <td style={tdStyle}>{Number(tx.quantity)}</td>
                                     <td style={tdStyle}>{formatCurrency(tx.unit_price)}</td>
                                     <td style={tdStyle}>
                                         {tx.realized_pnl !== 0 ? (
