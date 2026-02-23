@@ -172,7 +172,7 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
 
                                     {/* 現價 */}
                                     <td
-                                        style={{ textAlign: 'right' }}
+                                        style={{ textAlign: 'right', whiteSpace: 'nowrap' }}
                                         className={`number ${flash === 'up' ? 'price-flash-up' : flash === 'down' ? 'price-flash-down' : ''}`}
                                     >
                                         {formatCurrency(Number(pos.current_price), pos.category_slug)}
@@ -187,17 +187,17 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
                                     </td>
 
                                     {/* 平均成本 */}
-                                    <td style={{ textAlign: 'right' }} className="number">
+                                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }} className="number">
                                         {formatCurrency(Number(pos.avg_cost), pos.category_slug)}
                                     </td>
 
                                     {/* 市值 */}
-                                    <td style={{ textAlign: 'right', fontWeight: 600 }} className="number">
+                                    <td style={{ textAlign: 'right', fontWeight: 600, whiteSpace: 'nowrap' }} className="number">
                                         {formatCurrency(Number(pos.total_value), pos.category_slug)}
                                     </td>
 
                                     {/* 損益 */}
-                                    <td style={{ textAlign: 'right' }}>
+                                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                                         <span className={`number ${isProfit ? 'pnl-positive' : 'pnl-negative'}`}>
                                             {isProfit ? '+' : ''}{formatCurrency(pnl, pos.category_slug)}
                                         </span>

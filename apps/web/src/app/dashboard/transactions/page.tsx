@@ -282,8 +282,8 @@ export default function TransactionsPage() {
     );
 }
 
-const thStyle: React.CSSProperties = { padding: '16px', textAlign: 'left', color: 'var(--color-text-muted)', fontSize: '0.85rem', fontWeight: 600 };
-const tdStyle: React.CSSProperties = { padding: '16px', fontSize: '0.9rem' };
+const thStyle: React.CSSProperties = { padding: '16px', textAlign: 'left', color: 'var(--color-text-muted)', fontSize: '0.85rem', fontWeight: 600, whiteSpace: 'nowrap' };
+const tdStyle: React.CSSProperties = { padding: '16px', fontSize: '0.9rem', whiteSpace: 'nowrap' };
 const labelStyle: React.CSSProperties = { display: 'block', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '4px' };
 
 const getTxTypeLabel = (type: string) => {
