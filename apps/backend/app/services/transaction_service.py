@@ -7,7 +7,7 @@
 import logging
 from decimal import Decimal, ROUND_HALF_UP
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.transaction import Transaction, TransactionType
@@ -171,7 +171,7 @@ class TransactionService:
         
         position.total_quantity = current_qty
         position.avg_cost = current_avg_cost
-        position.updated_at = sa.func.now()
+        position.updated_at = func.now()
 
     async def recalculate_all_portfolios(self) -> dict:
         """
