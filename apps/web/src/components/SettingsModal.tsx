@@ -52,13 +52,18 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                                     color: 'var(--color-text-primary)'
                                 }}
                             >
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flex: 1 }}>
                                     <div style={{
                                         width: '24px', height: '24px', borderRadius: '50%',
                                         background: t.bg, border: `2px solid ${t.primary}`,
-                                        boxShadow: theme === t.id ? `0 0 10px ${t.primary}55` : 'none'
+                                        boxShadow: theme === t.id ? `0 0 10px ${t.primary}55` : 'none',
+                                        flexShrink: 0
                                     }} />
-                                    <span style={{ fontWeight: theme === t.id ? 600 : 400 }}>{t.name}</span>
+                                    <span style={{
+                                        fontWeight: theme === t.id ? 600 : 400,
+                                        textAlign: 'left',
+                                        lineHeight: '1.4'
+                                    }}>{t.name}</span>
                                 </div>
                                 {theme === t.id && (
                                     <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>✓</span>

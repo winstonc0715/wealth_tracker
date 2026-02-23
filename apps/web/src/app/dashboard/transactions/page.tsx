@@ -118,7 +118,7 @@ export default function TransactionsPage() {
                         >
                             ← 返回
                         </button>
-                        <h1 style={{ fontSize: '1.5rem', fontWeight: 800 }}>交易管理中心</h1>
+                        <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-text-primary)' }}>交易管理中心</h1>
                     </div>
                     <div style={{ display: 'flex', gap: '12px' }}>
                         <button
