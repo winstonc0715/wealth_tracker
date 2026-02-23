@@ -57,6 +57,7 @@ class PortfolioSummary(BaseModel):
     total_liabilities: Decimal
     net_worth: Decimal
     total_unrealized_pnl: Decimal
+    total_realized_pnl: Decimal
     positions: list[PositionDetail]
     last_updated: datetime
 

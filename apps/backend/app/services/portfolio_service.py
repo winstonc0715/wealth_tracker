@@ -55,14 +55,24 @@ class PortfolioService:
         if not portfolio:
             raise ValueError(f"投資組合 {portfolio_id} 不存在")
 
-        # 取得所有持倉
+        # 取得所有持倉 (僅顯示數量 > 0 的部位)
         stmt = (
             select(CurrentPosition)
             .where(CurrentPosition.portfolio_id == portfolio_id)
-            .where(CurrentPosition.total_quantity > 0)
+            .where(CurrentPosition.total_quantity != 0)
         )
         result = await self.db.execute(stmt)
         positions = result.scalars().all()
+
+        # 取得累計已實現損益 (加總所有交易的 realized_pnl)
+        from app.models.transaction import Transaction
+        from sqlalchemy import func
+        pnl_stmt = (
+            select(func.sum(Transaction.realized_pnl))
+            .where(Transaction.portfolio_id == portfolio_id)
+        )
+        pnl_result = await self.db.execute(pnl_stmt)
+        total_realized_pnl = pnl_result.scalar() or Decimal("0")
 
         # 取得 USD 匯率以統一轉為 TWD 計算
         usd_twd_rate = Decimal("32.0")
@@ -143,6 +153,7 @@ class PortfolioService:
             total_liabilities=total_liabilities,
             net_worth=net_worth,
             total_unrealized_pnl=total_unrealized_pnl,
+            total_realized_pnl=total_realized_pnl,
             positions=position_details,
             last_updated=datetime.now(),
         )

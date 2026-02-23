@@ -63,6 +63,7 @@ async def create_transaction(
             currency=tx.currency,
             executed_at=tx.executed_at,
             note=tx.note,
+            realized_pnl=tx.realized_pnl,
             created_at=tx.created_at,
         ),
         message="交易已新增",
@@ -106,6 +107,7 @@ async def get_transactions(
             currency=tx.currency,
             executed_at=tx.executed_at,
             note=tx.note,
+            realized_pnl=tx.realized_pnl,
             created_at=tx.created_at,
         )
         for tx in transactions
@@ -121,6 +123,58 @@ async def get_transactions(
         )
     )
 
+
+@router.patch("/{tx_id}", response_model=ApiResponse[TransactionResponse])
+async def update_transaction(
+    tx_id: str,
+    data: "TransactionUpdate",
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """更新交易紀錄並自動重算部位與損益"""
+    tx = await db.get(Transaction, tx_id)
+    if not tx:
+        raise HTTPException(status_code=404, detail="交易紀錄不存在")
+    
+    # 驗證投資組合歸屬
+    portfolio = await db.get(Portfolio, tx.portfolio_id)
+    if not portfolio or portfolio.user_id != user.id:
+        raise HTTPException(status_code=403, detail="無權限修改此交易")
+
+    service = TransactionService(db)
+    try:
+        updated_tx = await service.update_transaction(tx_id, data)
+        await db.refresh(updated_tx)
+        return ApiResponse(
+            data=TransactionResponse.model_validate(updated_tx),
+            message="交易已更新，損益已重新計算"
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/{tx_id}", response_model=ApiResponse[bool])
+async def delete_transaction(
+    tx_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """刪除交易紀錄並自動重算部位與損益"""
+    tx = await db.get(Transaction, tx_id)
+    if not tx:
+        raise HTTPException(status_code=404, detail="交易紀錄不存在")
+    
+    # 驗證投資組合歸屬
+    portfolio = await db.get(Portfolio, tx.portfolio_id)
+    if not portfolio or portfolio.user_id != user.id:
+        raise HTTPException(status_code=403, detail="無權限刪除此交易")
+
+    service = TransactionService(db)
+    try:
+        await service.delete_transaction(tx_id)
+        return ApiResponse(data=True, message="交易已刪除，損益已重新計算")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 # === 券商同步路由 ===
 

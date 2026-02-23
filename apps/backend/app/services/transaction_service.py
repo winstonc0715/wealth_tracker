@@ -52,30 +52,144 @@ class TransactionService:
         )
         self.db.add(tx)
 
-        # 更新持倉部位
-        await self._update_position(data)
+        # 更新持倉部位並計算損益
+        await self._update_position(tx)
 
         await self.db.flush()
         return tx
 
-    async def _update_position(self, data: TransactionCreate) -> None:
-        """根據交易類型更新持倉"""
+    async def update_transaction(
+        self, tx_id: str, data: "TransactionUpdate"
+    ) -> Transaction:
+        """更新交易紀錄並重新計算該標的之所有歷史部位與損益"""
+        tx = await self.db.get(Transaction, tx_id)
+        if not tx:
+            raise ValueError("交易紀錄不存在")
+
+        old_symbol = tx.symbol
+        old_portfolio_id = tx.portfolio_id
+
+        # 更新欄位
+        update_data = data.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(tx, key, value)
+
+        await self.db.flush()
+
+        # 重新計算該標的之損益（如果 symbol 改變了，則需要重新計算兩個標的）
+        await self.recalculate_position(old_portfolio_id, old_symbol)
+        if tx.symbol != old_symbol:
+            await self.recalculate_position(tx.portfolio_id, tx.symbol)
+
+        return tx
+
+    async def delete_transaction(self, tx_id: str) -> None:
+        """刪除交易紀錄並重新計算該標的之所有歷史部位與損益"""
+        tx = await self.db.get(Transaction, tx_id)
+        if not tx:
+            raise ValueError("交易紀錄不存在")
+
+        portfolio_id = tx.portfolio_id
+        symbol = tx.symbol
+
+        await self.db.delete(tx)
+        await self.db.flush()
+
+        # 重新計算該標的之損益
+        await self.recalculate_position(portfolio_id, symbol)
+
+    async def recalculate_position(self, portfolio_id: str, symbol: str) -> None:
+        """
+        全量重新計算特定標的之持倉成本與每筆賣出之實現損益
+        """
+        # 1. 取得該標的所有歷史交易（按執行時間排序）
+        stmt = (
+            select(Transaction)
+            .where(Transaction.portfolio_id == portfolio_id)
+            .where(Transaction.symbol == symbol)
+            .order_by(Transaction.executed_at.asc(), Transaction.created_at.asc())
+        )
+        result = await self.db.execute(stmt)
+        txs = result.scalars().all()
+
+        # 2. 取得或初始化持倉
+        stmt_pos = (
+            select(CurrentPosition)
+            .where(CurrentPosition.portfolio_id == portfolio_id)
+            .where(CurrentPosition.symbol == symbol)
+        )
+        result_pos = await self.db.execute(stmt_pos)
+        position = result_pos.scalar_one_or_none()
+
+        if not txs:
+            if position:
+                await self.db.delete(position)
+            return
+
+        # 3. 循序計算
+        current_qty = Decimal("0")
+        current_avg_cost = Decimal("0")
+        
+        # 紀錄第一個交易的 category_id 做為持倉預設
+        category_id = txs[0].category_id
+        asset_name = txs[0].asset_name
+        currency = txs[0].currency
+
+        for tx in txs:
+            if tx.tx_type in (TransactionType.BUY, TransactionType.DEPOSIT):
+                # 新增成本
+                old_total = current_qty * current_avg_cost
+                new_total = tx.quantity * tx.unit_price
+                current_qty += tx.quantity
+                if current_qty > 0:
+                    current_avg_cost = (
+                        (old_total + new_total) / current_qty
+                    ).quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP)
+                tx.realized_pnl = Decimal("0") # 買入無實現損益
+            
+            elif tx.tx_type in (TransactionType.SELL, TransactionType.WITHDRAW):
+                # 賣出計算損益：(賣價 - 成本) * 數量 - 手續費
+                realized = (tx.unit_price - current_avg_cost) * tx.quantity - tx.fee
+                tx.realized_pnl = realized.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+                current_qty -= tx.quantity
+            
+            elif tx.tx_type == TransactionType.DIVIDEND:
+                # 配息全額為損益
+                realized = (tx.unit_price * tx.quantity) - tx.fee
+                tx.realized_pnl = realized.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+
+        # 4. 更新持倉模型
+        if not position:
+            position = CurrentPosition(
+                portfolio_id=portfolio_id,
+                symbol=symbol,
+                category_id=category_id,
+                name=asset_name,
+                currency=currency,
+            )
+            self.db.add(position)
+        
+        position.total_quantity = current_qty
+        position.avg_cost = current_avg_cost
+        position.updated_at = func.now()
+
+    async def _update_position(self, tx: Transaction) -> None:
+        """根據交易類型更新持倉並計算已實現損益"""
         # 查詢現有持倉
         stmt = (
             select(CurrentPosition)
-            .where(CurrentPosition.portfolio_id == data.portfolio_id)
-            .where(CurrentPosition.symbol == data.symbol)
+            .where(CurrentPosition.portfolio_id == tx.portfolio_id)
+            .where(CurrentPosition.symbol == tx.symbol)
         )
         result = await self.db.execute(stmt)
         position = result.scalar_one_or_none()
 
-        if data.tx_type in (TransactionType.BUY, TransactionType.DEPOSIT):
+        if tx.tx_type in (TransactionType.BUY, TransactionType.DEPOSIT):
             if position:
                 # 計算新的加權平均成本
-                # new_avg = (old_qty × old_avg + new_qty × new_price) / (old_qty + new_qty)
                 old_total = position.total_quantity * position.avg_cost
-                new_total = data.quantity * data.unit_price
-                new_quantity = position.total_quantity + data.quantity
+                new_total = tx.quantity * tx.unit_price
+                new_quantity = position.total_quantity + tx.quantity
 
                 if new_quantity > 0:
                     position.avg_cost = (
@@ -83,45 +197,53 @@ class TransactionService:
                     ).quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP)
                     position.total_quantity = new_quantity
                     # 更新名稱（如果有提供）
-                    if data.asset_name:
-                        position.name = data.asset_name
+                    if tx.asset_name:
+                        position.name = tx.asset_name
             else:
                 # 建立新持倉
                 position = CurrentPosition(
-                    portfolio_id=data.portfolio_id,
-                    category_id=data.category_id,
-                    symbol=data.symbol,
-                    name=data.asset_name,
-                    total_quantity=data.quantity,
-                    avg_cost=data.unit_price,
-                    currency=data.currency,
+                    portfolio_id=tx.portfolio_id,
+                    category_id=tx.category_id,
+                    symbol=tx.symbol,
+                    name=tx.asset_name,
+                    total_quantity=tx.quantity,
+                    avg_cost=tx.unit_price,
+                    currency=tx.currency,
                 )
                 self.db.add(position)
 
-        elif data.tx_type in (TransactionType.SELL, TransactionType.WITHDRAW):
+        elif tx.tx_type in (TransactionType.SELL, TransactionType.WITHDRAW):
             if not position:
                 logger.warning(
-                    "賣出 %s 但無持倉記錄，將建立負數持倉", data.symbol
+                    "賣出 %s 但無持倉記錄，將建立負數持倉", tx.symbol
                 )
                 position = CurrentPosition(
-                    portfolio_id=data.portfolio_id,
-                    category_id=data.category_id,
-                    symbol=data.symbol,
-                    name=data.asset_name,
-                    total_quantity=-data.quantity,
-                    avg_cost=data.unit_price,
-                    currency=data.currency,
+                    portfolio_id=tx.portfolio_id,
+                    category_id=tx.category_id,
+                    symbol=tx.symbol,
+                    name=tx.asset_name,
+                    total_quantity=-tx.quantity,
+                    avg_cost=tx.unit_price,
+                    currency=tx.currency,
                 )
                 self.db.add(position)
             else:
-                # 賣出不影響平均成本，只減少數量
-                position.total_quantity -= data.quantity
+                # 賣出計算實現損益：(賣價 - 成本) * 數量 - 手續費
+                # 注意：這裡假設賣出不影響平均成本
+                realized = (tx.unit_price - position.avg_cost) * tx.quantity - tx.fee
+                tx.realized_pnl = realized.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+                
+                # 減少數量
+                position.total_quantity -= tx.quantity
 
-        elif data.tx_type == TransactionType.DIVIDEND:
-            # 配息：可選擇增加法幣部位或僅記錄
+        elif tx.tx_type == TransactionType.DIVIDEND:
+            # 配息視為 100% 實現損益：(單價*數量) - 手續費
+            realized = (tx.unit_price * tx.quantity) - tx.fee
+            tx.realized_pnl = realized.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+            
             logger.info(
-                "配息入帳: %s %s × %s",
-                data.symbol, data.quantity, data.unit_price,
+                "配息入帳 (已實現損益): %s %s, realized=%s",
+                tx.symbol, tx.total_amount, tx.realized_pnl
             )
 
     async def get_transactions(

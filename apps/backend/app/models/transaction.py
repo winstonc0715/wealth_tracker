@@ -82,6 +82,10 @@ class Transaction(Base):
         String(500), nullable=True,
         comment="備註",
     )
+    realized_pnl: Mapped[Decimal] = mapped_column(
+        Numeric(precision=18, scale=4), default=Decimal("0"),
+        comment="已實現損益 (僅 SELL/DIVIDEND 類型有值)",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(),
     )

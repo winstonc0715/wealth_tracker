@@ -27,6 +27,19 @@ class TransactionCreate(BaseModel):
     note: str | None = None
 
 
+class TransactionUpdate(BaseModel):
+    """更新交易請求"""
+    category_id: int | None = None
+    symbol: str | None = Field(default=None, max_length=20)
+    asset_name: str | None = Field(default=None, max_length=100)
+    tx_type: TransactionType | None = None
+    quantity: Decimal | None = Field(default=None, gt=0)
+    unit_price: Decimal | None = Field(default=None, ge=0)
+    fee: Decimal | None = Field(default=None, ge=0)
+    currency: str | None = None
+    executed_at: datetime | None = None
+    note: str | None = None
+
 class TransactionResponse(BaseModel):
     """交易紀錄回應"""
     id: str
@@ -42,6 +55,7 @@ class TransactionResponse(BaseModel):
     currency: str
     executed_at: datetime
     note: str | None
+    realized_pnl: Decimal = Decimal("0")
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}

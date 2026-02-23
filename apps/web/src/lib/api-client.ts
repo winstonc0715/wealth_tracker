@@ -187,6 +187,19 @@ class ApiClient {
         );
     }
 
+    async updateTransaction(txId: string, data: Partial<TransactionInput>) {
+        return this.request<Transaction>(`/transactions/${txId}`, {
+            method: 'PATCH',
+            body: JSON.stringify(data),
+        });
+    }
+
+    async deleteTransaction(txId: string) {
+        return this.request<boolean>(`/transactions/${txId}`, {
+            method: 'DELETE',
+        });
+    }
+
     // === Broker ===
     async importCSV(portfolioId: string, file: File, brokerFormat = 'standard', categoryId = 1) {
         const formData = new FormData();
@@ -240,6 +253,7 @@ export interface PortfolioSummary {
     total_liabilities: number;
     net_worth: number;
     total_unrealized_pnl: number;
+    total_realized_pnl: number;
     positions: PositionDetail[];
     last_updated: string;
 }
@@ -282,6 +296,7 @@ export interface Transaction {
     currency: string;
     executed_at: string;
     note: string | null;
+    realized_pnl: number;
     created_at: string;
 }
 

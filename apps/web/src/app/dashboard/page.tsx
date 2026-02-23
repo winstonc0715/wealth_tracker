@@ -301,7 +301,7 @@ export default function DashboardPage() {
                     <button
                         className="btn-secondary"
                         style={{ padding: '8px 12px', fontSize: '0.85rem' }}
-                        onClick={refreshAll}
+                        onClick={() => refreshAll()}
                         disabled={isLoading}
                     >
                         {isLoading ? '⟳' : '🔄'} 更新
@@ -357,6 +357,25 @@ export default function DashboardPage() {
                         }}>
                             <span className={(summary?.total_unrealized_pnl || 0) >= 0 ? 'pnl-positive' : 'pnl-negative'}>
                                 {(summary?.total_unrealized_pnl || 0) >= 0 ? '+' : ''}{formatCurrency(summary?.total_unrealized_pnl || 0)}
+                            </span>
+                        </div>
+                    </div>
+                    <div
+                        className={`card stat-card ${(summary?.total_realized_pnl || 0) >= 0 ? 'profit' : 'loss'}`}
+                        style={{ cursor: 'pointer', transition: 'transform 0.2s' }}
+                        onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-4px)'}
+                        onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                        onClick={() => router.push('/dashboard/transactions')}
+                    >
+                        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>已實現損益</span>
+                        <div style={{
+                            fontSize: '1.4rem',
+                            fontWeight: 700,
+                            fontFamily: "'JetBrains Mono', monospace",
+                            marginTop: '4px',
+                        }}>
+                            <span className={(summary?.total_realized_pnl || 0) >= 0 ? 'pnl-positive' : 'pnl-negative'}>
+                                {(summary?.total_realized_pnl || 0) >= 0 ? '+' : ''}{formatCurrency(summary?.total_realized_pnl || 0)}
                             </span>
                         </div>
                     </div>
