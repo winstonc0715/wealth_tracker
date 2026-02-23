@@ -178,9 +178,9 @@ export default function TransactionsPage() {
                                                 onClick={() => {
                                                     setEditingTx(tx);
                                                     setEditNote(tx.note || '');
-                                                    setEditQuantity(tx.quantity);
-                                                    setEditPrice(tx.unit_price);
-                                                    setEditFee(tx.fee);
+                                                    setEditQuantity(Number(tx.quantity));
+                                                    setEditPrice(Number(tx.unit_price));
+                                                    setEditFee(Number(tx.fee));
                                                 }}
                                             >
                                                 編輯
