@@ -31,8 +31,8 @@ interface PortfolioState {
     selectPortfolio: (portfolio: Portfolio) => Promise<void>;
     fetchSummary: (portfolioId: string) => Promise<void>;
     fetchAllocations: (portfolioId: string) => Promise<void>;
-    fetchHistory: (portfolioId: string) => Promise<void>;
-    refreshAll: () => Promise<void>;
+    fetchHistory: (portfolioId: string, days?: number) => Promise<void>;
+    refreshAll: (days?: number) => Promise<void>;
     createPortfolio: (name: string, description?: string) => Promise<void>;
 
     // 多幣別動作
@@ -99,16 +99,16 @@ export const usePortfolioStore = create<PortfolioState>((set, get) => ({
         }
     },
 
-    fetchHistory: async (portfolioId) => {
+    fetchHistory: async (portfolioId, days = 30) => {
         try {
-            const result = await apiClient.getPortfolioHistory(portfolioId);
+            const result = await apiClient.getPortfolioHistory(portfolioId, days);
             set({ history: result.data });
         } catch (error) {
             set({ error: (error as Error).message });
         }
     },
 
-    refreshAll: async () => {
+    refreshAll: async (days?: number) => {
         const { selectedPortfolio } = get();
         if (selectedPortfolio) {
             set({ isLoading: true });
@@ -116,7 +116,7 @@ export const usePortfolioStore = create<PortfolioState>((set, get) => ({
             await Promise.all([
                 get().fetchSummary(selectedPortfolio.id),
                 get().fetchAllocations(selectedPortfolio.id),
-                get().fetchHistory(selectedPortfolio.id),
+                get().fetchHistory(selectedPortfolio.id, days),
             ]);
             set({ isLoading: false });
         }

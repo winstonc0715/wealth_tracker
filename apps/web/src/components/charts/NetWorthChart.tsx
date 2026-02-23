@@ -6,6 +6,7 @@
  * 使用 Recharts 繪製互動式淨值趨勢圖。
  */
 
+import { useState, useEffect } from 'react';
 import {
     ResponsiveContainer,
     AreaChart,
@@ -21,8 +22,23 @@ interface NetWorthChartProps {
     data: { date: string; value: number }[];
 }
 
+const PERIOD_DAYS: Record<string, number> = {
+    '1W': 7,
+    '1M': 30,
+    '3M': 90,
+    '1Y': 365,
+};
+
 export default function NetWorthChart({ data }: NetWorthChartProps) {
-    const { displayCurrency, exchangeRate } = usePortfolioStore();
+    const { selectedPortfolio, fetchHistory, displayCurrency, exchangeRate } = usePortfolioStore();
+    const [activePeriod, setActivePeriod] = useState('1M');
+
+    const handlePeriodChange = (period: string) => {
+        setActivePeriod(period);
+        if (selectedPortfolio) {
+            fetchHistory(selectedPortfolio.id, PERIOD_DAYS[period]);
+        }
+    };
 
     if (!data || data.length === 0) {
         return (
@@ -62,8 +78,15 @@ export default function NetWorthChart({ data }: NetWorthChartProps) {
                     {['1W', '1M', '3M', '1Y'].map((period) => (
                         <button
                             key={period}
-                            className="btn-secondary"
-                            style={{ padding: '4px 12px', fontSize: '0.8rem' }}
+                            className={activePeriod === period ? "btn-primary" : "btn-secondary"}
+                            style={{
+                                padding: '4px 12px',
+                                fontSize: '0.8rem',
+                                background: activePeriod === period ? 'var(--color-primary)' : 'rgba(42, 42, 90, 0.3)',
+                                borderColor: activePeriod === period ? 'var(--color-primary)' : 'var(--color-border)',
+                                color: activePeriod === period ? '#fff' : 'var(--color-text-secondary)',
+                            }}
+                            onClick={() => handlePeriodChange(period)}
                         >
                             {period}
                         </button>
