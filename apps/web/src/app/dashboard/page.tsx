@@ -93,6 +93,14 @@ export default function DashboardPage() {
             return;
         }
         fetchPortfolios();
+
+        // 設置定期輪詢機制：每 60 秒刷新一次報價資料
+        const pollInterval = setInterval(() => {
+            console.log('[WealthTracker] 定期自動刷新報價...');
+            refreshAll();
+        }, 60000);
+
+        return () => clearInterval(pollInterval);
     }, []);
 
     const handleCreatePortfolio = async () => {
