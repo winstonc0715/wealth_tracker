@@ -96,52 +96,44 @@ app.add_middleware(
 )
 
 
-# === 全域錯誤處理 ===
+# === 全域錯誤與日誌處理 ===
 
 @app.middleware("http")
-async def error_handling_middleware(request: Request, call_next):
-    """
-    全域錯誤處理與請求日誌中介軟體
-
-    - 記錄每個請求的處理時間
-    - 捕獲未預期的例外並回傳統一格式
-    """
+async def logging_middleware(request: Request, call_next):
+    """記錄每個請求的處理時間"""
     start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    
+    logger.info(
+        "%s %s - %d (%.3fs)",
+        request.method,
+        request.url.path,
+        response.status_code,
+        process_time,
+    )
 
-    try:
-        response = await call_next(request)
+    response.headers["X-Process-Time"] = f"{process_time:.3f}"
+    return response
 
-        # 記錄請求日誌
-        process_time = time.time() - start_time
-        logger.info(
-            "%s %s - %d (%.3fs)",
-            request.method,
-            request.url.path,
-            response.status_code,
-            process_time,
-        )
-
-        response.headers["X-Process-Time"] = f"{process_time:.3f}"
-        return response
-
-    except Exception as e:
-        process_time = time.time() - start_time
-        logger.error(
-            "%s %s - 500 (%.3fs) Error: %s",
-            request.method,
-            request.url.path,
-            process_time,
-            str(e),
-        )
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "error": "Internal Server Error",
-                "detail": str(e) if settings.is_development else None,
-            },
-        )
-
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """全域例外處理器，確保回應帶有 CORS Headers"""
+    logger.error(
+        "%s %s - 500 Error: %s",
+        request.method,
+        request.url.path,
+        str(exc),
+        exc_info=exc,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "success": False,
+            "error": "Internal Server Error",
+            "detail": str(exc) if settings.is_development else None,
+        },
+    )
 
 # === 註冊路由 ===
 app.include_router(api_router)
