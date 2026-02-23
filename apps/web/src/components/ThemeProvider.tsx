@@ -38,11 +38,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    // 為了避免 Hydration Mismatch，在此之前渲染原本層次
-    if (!mounted) {
-        return <>{children}</>;
-    }
-
     return (
         <ThemeContext.Provider value={{ theme, setTheme }}>
             {children}
