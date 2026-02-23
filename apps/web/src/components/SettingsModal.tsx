@@ -11,10 +11,13 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     const { theme, setTheme } = useTheme();
 
     const themes = [
-        { id: 'default', name: '湛藍 (Slate & Indigo)', bg: '#0f172a', primary: '#6366f1' },
+        { id: 'default', name: '極簡雪白 (Snow Minimal)', bg: '#ffffff', primary: '#2563eb' },
+        { id: 'vanilla', name: '溫潤米白 (Vanilla Cream)', bg: '#fdfbf7', primary: '#8b5a2b' },
+        { id: 'silver', name: '俐落銀灰 (Silver Steel)', bg: '#f1f5f9', primary: '#0ea5e9' },
+        { id: 'slate', name: '深邃湛藍 (Slate & Indigo)', bg: '#0f172a', primary: '#6366f1' },
         { id: 'obsidian', name: '黑曜 (Onyx & Zinc)', bg: '#000000', primary: '#fafafa' },
-        { id: 'forest', name: '蒼翠 (Emerald & Neutral)', bg: '#0a0a0a', primary: '#10b981' },
-        { id: 'cyber', name: '暮紫 (Violet & Slate)', bg: '#0b0415', primary: '#8b5cf6' },
+        { id: 'forest', name: '蒼翠森林 (Emerald & Neutral)', bg: '#0a0a0a', primary: '#10b981' },
+        { id: 'cyber', name: '賽博暮紫 (Violet & Slate)', bg: '#0b0415', primary: '#8b5cf6' },
     ] as const;
 
     return (

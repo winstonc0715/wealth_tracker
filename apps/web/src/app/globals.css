@@ -3,7 +3,80 @@
 /* === WealthTracker Design System === */
 
 :root {
-  /* 湛藍 (Slate & Indigo) - 預設 */
+  /* 極簡雪白 (Snow Minimal) - 預設 */
+  color-scheme: light;
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-text: #ffffff;
+  --color-profit: #059669;
+  --color-profit-bg: rgba(5, 150, 105, 0.15);
+  --color-loss: #dc2626;
+  --color-loss-bg: rgba(220, 38, 38, 0.15);
+
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #f8fafc;
+  --color-bg-card: #ffffff;
+  --color-bg-card-hover: #f1f5f9;
+  --color-border: #e2e8f0;
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748b;
+
+  --shadow-card: 0 2px 8px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.02);
+  --shadow-card-hover: 0 10px 20px rgba(15, 23, 42, 0.08), 0 4px 6px rgba(15, 23, 42, 0.04);
+}
+
+/* 溫潤米白 (Vanilla Cream) */
+[data-theme="vanilla"] {
+  color-scheme: light;
+  --color-primary: #8b5a2b;
+  --color-primary-hover: #6b4423;
+  --color-primary-text: #ffffff;
+  --color-profit: #65a30d;
+  --color-profit-bg: rgba(101, 163, 13, 0.15);
+  --color-loss: #b91c1c;
+  --color-loss-bg: rgba(185, 28, 28, 0.15);
+
+  --color-bg-primary: #fdfbf7;
+  --color-bg-secondary: #f4f1ea;
+  --color-bg-card: #ffffff;
+  --color-bg-card-hover: #faf8f5;
+  --color-border: #e8e4db;
+  --color-text-primary: #433829;
+  --color-text-secondary: #78716c;
+  --color-text-muted: #a8a29e;
+
+  --shadow-card: 0 2px 8px rgba(67, 56, 41, 0.04);
+  --shadow-card-hover: 0 10px 20px rgba(67, 56, 41, 0.08);
+}
+
+/* 俐落銀灰 (Silver Steel) */
+[data-theme="silver"] {
+  color-scheme: light;
+  --color-primary: #0ea5e9;
+  --color-primary-hover: #0284c7;
+  --color-primary-text: #ffffff;
+  --color-profit: #059669;
+  --color-profit-bg: rgba(5, 150, 105, 0.15);
+  --color-loss: #e11d48;
+  --color-loss-bg: rgba(225, 29, 72, 0.15);
+
+  --color-bg-primary: #f1f5f9;
+  --color-bg-secondary: #e2e8f0;
+  --color-bg-card: #ffffff;
+  --color-bg-card-hover: #f8fafc;
+  --color-border: #cbd5e1;
+  --color-text-primary: #1e293b;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748b;
+
+  --shadow-card: 0 2px 6px rgba(30, 41, 59, 0.04);
+  --shadow-card-hover: 0 8px 16px rgba(30, 41, 59, 0.08);
+}
+
+/* 湛藍 (Slate & Indigo) */
+[data-theme="slate"] {
+  color-scheme: dark;
   --color-primary: #6366f1;
   --color-primary-hover: #4f46e5;
   --color-primary-text: #ffffff;
@@ -20,10 +93,14 @@
   --color-text-primary: #f8fafc;
   --color-text-secondary: #94a3b8;
   --color-text-muted: #64748b;
+
+  --shadow-card: none;
+  --shadow-card-hover: 0 4px 20px rgba(0, 0, 0, 0.4);
 }
 
-/* 黑曜 (Onyx) */
+/* 黑曜 (Onyx & Zinc) */
 [data-theme="obsidian"] {
+  color-scheme: dark;
   --color-primary: #fafafa;
   --color-primary-hover: #e4e4e7;
   --color-primary-text: #09090b;
@@ -40,10 +117,14 @@
   --color-text-primary: #ffffff;
   --color-text-secondary: #a1a1aa;
   --color-text-muted: #71717a;
+
+  --shadow-card: none;
+  --shadow-card-hover: 0 4px 20px rgba(255, 255, 255, 0.05);
 }
 
-/* 蒼翠 (Emerald) */
+/* 蒼翠 (Emerald & Neutral) */
 [data-theme="forest"] {
+  color-scheme: dark;
   --color-primary: #10b981;
   --color-primary-hover: #059669;
   --color-primary-text: #ffffff;
@@ -60,10 +141,14 @@
   --color-text-primary: #fafafa;
   --color-text-secondary: #a3a3a3;
   --color-text-muted: #737373;
+
+  --shadow-card: none;
+  --shadow-card-hover: 0 4px 20px rgba(0, 0, 0, 0.4);
 }
 
-/* 暮紫 (Violet) */
+/* 暮紫 (Violet & Slate) */
 [data-theme="cyber"] {
+  color-scheme: dark;
   --color-primary: #8b5cf6;
   --color-primary-hover: #7c3aed;
   --color-primary-text: #ffffff;
@@ -80,6 +165,11 @@
   --color-text-primary: #f5f3ff;
   --color-text-secondary: #a78bfa;
   --color-text-muted: #8b5cf6;
+
+  --shadow-card: none;
+  --shadow-card-hover: 0 4px 20px rgba(139, 92, 246, 0.1)
+    /* highlight shadow */
+  ;
 }
 
 /* === Global Styles === */
@@ -88,10 +178,6 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-}
-
-html {
-  color-scheme: dark;
 }
 
 body {
@@ -110,12 +196,13 @@ body {
   border: 1px solid var(--color-border);
   border-radius: 16px;
   padding: 24px;
+  box-shadow: var(--shadow-card);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .card:hover {
   border-color: var(--color-text-muted);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-card-hover);
 }
 
 .card-glass {
@@ -190,6 +277,7 @@ body {
   padding: 10px 20px;
   font-weight: 600;
   cursor: pointer;
+  box-shadow: var(--shadow-card);
   transition: all 0.2s ease;
   font-size: 0.95rem;
 }
@@ -197,7 +285,7 @@ body {
 .btn-primary:hover {
   background: var(--color-primary-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-card-hover);
 }
 
 .btn-secondary {
