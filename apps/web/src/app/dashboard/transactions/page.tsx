@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import apiClient from '@/lib/api-client';
 import type { Transaction } from '@/lib/api-client';
 import { usePortfolioStore } from '@/stores/portfolio-store';
+import SettingsModal from '@/components/SettingsModal';
 
 export default function TransactionsPage() {
     const router = useRouter();
@@ -22,6 +23,7 @@ export default function TransactionsPage() {
     const [editFee, setEditFee] = useState<number>(0);
     const [isUpdating, setIsUpdating] = useState(false);
     const [isRecalculating, setIsRecalculating] = useState(false);
+    const [showSettings, setShowSettings] = useState(false);
 
     useEffect(() => {
         if (!selectedPortfolio) {
@@ -118,7 +120,14 @@ export default function TransactionsPage() {
                         </button>
                         <h1 style={{ fontSize: '1.5rem', fontWeight: 800 }}>交易管理中心</h1>
                     </div>
-                    <div>
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                        <button
+                            className="btn-secondary"
+                            style={{ padding: '8px 16px' }}
+                            onClick={() => setShowSettings(true)}
+                        >
+                            ⚙️ 設定
+                        </button>
                         <button
                             className="btn-secondary"
                             style={{ padding: '8px 16px' }}
@@ -278,6 +287,9 @@ export default function TransactionsPage() {
                     </div>
                 </div>
             )}
+
+            {/* ====== 設定 Modal ====== */}
+            {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
         </div>
     );
 }

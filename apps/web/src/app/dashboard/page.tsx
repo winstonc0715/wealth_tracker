@@ -14,6 +14,7 @@ import { usePortfolioStore } from '@/stores/portfolio-store';
 import NetWorthChart from '@/components/charts/NetWorthChart';
 import AllocationPie from '@/components/charts/AllocationPie';
 import PositionTable, { CATEGORY_IDS } from '@/components/tables/PositionTable';
+import SettingsModal from '@/components/SettingsModal';
 
 // 交易類型
 const TX_TYPES = [
@@ -42,6 +43,7 @@ export default function DashboardPage() {
     } = usePortfolioStore();
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showTxModal, setShowTxModal] = useState(false);
+    const [showSettings, setShowSettings] = useState(false);
     const [newPortfolioName, setNewPortfolioName] = useState('');
 
     // 交易表單狀態
@@ -305,6 +307,13 @@ export default function DashboardPage() {
                         disabled={isLoading}
                     >
                         {isLoading ? '⟳' : '🔄'} 更新
+                    </button>
+                    <button
+                        className="btn-secondary"
+                        style={{ padding: '8px 12px', fontSize: '0.85rem' }}
+                        onClick={() => setShowSettings(true)}
+                    >
+                        ⚙️ 設定
                     </button>
                     <button
                         className="btn-secondary"

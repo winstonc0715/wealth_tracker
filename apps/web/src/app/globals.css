@@ -22,6 +22,60 @@
   --color-text-muted: #555577;
 }
 
+/* 曜石黑 (Obsidian Black) */
+[data-theme="obsidian"] {
+  --color-primary: #a3a3a3;
+  --color-primary-hover: #ffffff;
+  --color-bg-primary: #000000;
+  --color-bg-secondary: #0a0a0a;
+  --color-bg-card: #0f0f0f;
+  --color-bg-card-hover: #1f1f1f;
+  --color-border: #262626;
+  --color-text-primary: #f5f5f5;
+  --color-text-secondary: #a3a3a3;
+  --color-text-muted: #737373;
+  --color-profit: #4ADE80;
+  --color-profit-bg: rgba(74, 222, 128, 0.1);
+  --color-loss: #F87171;
+  --color-loss-bg: rgba(248, 113, 113, 0.1);
+}
+
+/* 森林綠 (Forest Green) */
+[data-theme="forest"] {
+  --color-primary: #10b981;
+  --color-primary-hover: #059669;
+  --color-bg-primary: #022c22;
+  --color-bg-secondary: #064e3b;
+  --color-bg-card: #065f46;
+  --color-bg-card-hover: #047857;
+  --color-border: #0f766e;
+  --color-text-primary: #ecfdf5;
+  --color-text-secondary: #6ee7b7;
+  --color-text-muted: #34d399;
+  --color-profit: #34d399;
+  --color-profit-bg: rgba(52, 211, 153, 0.15);
+  --color-loss: #f87171;
+  --color-loss-bg: rgba(248, 113, 113, 0.15);
+}
+
+/* 霓虹紫 (Cyber Purple) */
+[data-theme="cyber"] {
+  --color-primary: #d946ef;
+  --color-primary-hover: #c026d3;
+  --color-bg-primary: #190028;
+  --color-bg-secondary: #2e1065;
+  --color-bg-card: #3b0764;
+  --color-bg-card-hover: #581c87;
+  --color-border: #6b21a8;
+  --color-text-primary: #fff1f2;
+  --color-text-secondary: #fbcfe8;
+  --color-text-muted: #f472b6;
+  --color-profit: #2dd4bf;
+  --color-profit-bg: rgba(45, 212, 191, 0.15);
+  --color-loss: #fb7185;
+  --color-loss-bg: rgba(251, 113, 133, 0.15);
+}
+
 /* === Global Styles === */
 
 * {

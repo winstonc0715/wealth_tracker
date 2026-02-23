@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import './globals.css';
+import { ThemeProvider } from '@/components/ThemeProvider';
 
 export const metadata: Metadata = {
     title: 'WealthTracker - 跨平台資產管理系統',
@@ -23,9 +24,11 @@ export default function RootLayout({
                 />
             </head>
             <body>
-                <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-                    {children}
-                </GoogleOAuthProvider>
+                <ThemeProvider>
+                    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+                        {children}
+                    </GoogleOAuthProvider>
+                </ThemeProvider>
             </body>
         </html>
     );
