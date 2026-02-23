@@ -139,7 +139,30 @@ class PriceManager:
             {symbol: PriceData, ...}
         """
         results: dict[str, PriceData] = {}
-        for symbol, category_slug in items:
+        
+        # 若不強制刷新，先大量並行查快取
+        missed_items = []
+        if not force_refresh:
+            async def _check_cache(sym: str, slug: str) -> tuple[str, PriceData | None]:
+                provider_name = CATEGORY_PROVIDER_MAP.get(slug, "")
+                if provider_name:
+                    cached = await get_cached_price(provider_name, sym)
+                    return sym, cached
+                return sym, None
+            
+            cache_tasks = [_check_cache(sym, cat) for sym, cat in items]
+            cache_results = await asyncio.gather(*cache_tasks)
+            
+            for (sym, cat), (_, cached) in zip(items, cache_results):
+                if cached:
+                    results[sym] = cached
+                else:
+                    missed_items.append((sym, cat))
+        else:
+            missed_items = items
+
+        # 針對沒快取的 (或強制刷新的)，循序抓取並加入防護延遲
+        for i, (symbol, category_slug) in enumerate(missed_items):
             try:
                 results[symbol] = await self.get_price(symbol, category_slug, force_refresh=force_refresh)
             except Exception as e:
@@ -161,8 +184,9 @@ class PriceManager:
                     source="error",
                 )
             
-            # API 請求間加入短暫延遲，防範 Rate Limit (429) 
-            await asyncio.sleep(0.5)
+            # API 請求間加入短暫延遲，防範 Rate Limit (429) (最後一筆不用等)
+            if i < len(missed_items) - 1:
+                await asyncio.sleep(0.5)
 
         return results
 
