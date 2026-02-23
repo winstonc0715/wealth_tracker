@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.user import User
 from app.models.portfolio import Portfolio
+from app.models.transaction import Transaction
 from app.broker.csv_parser import CSVParser
 from app.broker.reconciliation import ReconciliationService
 from app.services.transaction_service import TransactionService
