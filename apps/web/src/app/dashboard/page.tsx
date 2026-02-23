@@ -639,6 +639,9 @@ export default function DashboardPage() {
                     </div>
                 </div>
             )}
+
+            {/* ====== 設定 Modal ====== */}
+            {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
         </div>
     );
 }
