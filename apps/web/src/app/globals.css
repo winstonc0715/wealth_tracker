@@ -98,78 +98,100 @@
   --shadow-card-hover: 0 4px 20px rgba(0, 0, 0, 0.4);
 }
 
-/* 黑曜 (Onyx & Zinc) */
-[data-theme="obsidian"] {
+/* 海洋深藍 (Deep Blue Ocean) */
+[data-theme="ocean"] {
   color-scheme: dark;
-  --color-primary: #fafafa;
-  --color-primary-hover: #e4e4e7;
-  --color-primary-text: #09090b;
-  --color-profit: #22c55e;
-  --color-profit-bg: rgba(34, 197, 94, 0.15);
+  --color-primary: #3b82f6;
+  --color-primary-hover: #2563eb;
+  --color-primary-text: #ffffff;
+  --color-profit: #10b981;
+  --color-profit-bg: rgba(16, 185, 129, 0.15);
+  --color-loss: #ef4444;
+  --color-loss-bg: rgba(239, 68, 68, 0.15);
+
+  --color-bg-primary: #11182a;
+  --color-bg-secondary: #0b1120;
+  --color-bg-card: #1e293b;
+  --color-bg-card-hover: #29384e;
+  --color-border: #334155;
+  --color-text-primary: #f8fafc;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #64748b;
+
+  --shadow-card: none;
+  --shadow-card-hover: 0 4px 20px rgba(59, 130, 246, 0.15);
+}
+
+/* 奢華黑金 (Luxury Gold & Charcoal) */
+[data-theme="gold"] {
+  color-scheme: dark;
+  --color-primary: #f59e0b;
+  --color-primary-hover: #d97706;
+  --color-primary-text: #000000;
+  --color-profit: #34d399;
+  --color-profit-bg: rgba(52, 211, 153, 0.15);
   --color-loss: #f87171;
   --color-loss-bg: rgba(248, 113, 113, 0.15);
 
-  --color-bg-primary: #000000;
-  --color-bg-secondary: #09090b;
-  --color-bg-card: #09090b;
-  --color-bg-card-hover: #18181b;
-  --color-border: #27272a;
-  --color-text-primary: #ffffff;
+  --color-bg-primary: #141414;
+  --color-bg-secondary: #0a0a0a;
+  --color-bg-card: #1f1f1f;
+  --color-bg-card-hover: #2a2a2a;
+  --color-border: #333333;
+  --color-text-primary: #fdf6e3;
   --color-text-secondary: #a1a1aa;
   --color-text-muted: #71717a;
 
   --shadow-card: none;
-  --shadow-card-hover: 0 4px 20px rgba(255, 255, 255, 0.05);
+  --shadow-card-hover: 0 4px 20px rgba(245, 158, 11, 0.1);
 }
 
-/* 蒼翠 (Emerald & Neutral) */
+/* 靜謐幽綠 (Serene Forest Green) */
 [data-theme="forest"] {
   color-scheme: dark;
-  --color-primary: #10b981;
-  --color-primary-hover: #059669;
-  --color-primary-text: #ffffff;
-  --color-profit: #34d399;
-  --color-profit-bg: rgba(52, 211, 153, 0.15);
-  --color-loss: #f43f5e;
-  --color-loss-bg: rgba(244, 63, 94, 0.15);
+  --color-primary: #34d399;
+  --color-primary-hover: #10b981;
+  --color-primary-text: #000000;
+  --color-profit: #6ee7b7;
+  --color-profit-bg: rgba(110, 231, 183, 0.15);
+  --color-loss: #fca5a5;
+  --color-loss-bg: rgba(252, 165, 165, 0.15);
 
-  --color-bg-primary: #0a0a0a;
-  --color-bg-secondary: #000000;
-  --color-bg-card: #171717;
-  --color-bg-card-hover: #262626;
-  --color-border: #262626;
-  --color-text-primary: #fafafa;
-  --color-text-secondary: #a3a3a3;
-  --color-text-muted: #737373;
+  --color-bg-primary: #132a24;
+  --color-bg-secondary: #0b1c16;
+  --color-bg-card: #1a3b32;
+  --color-bg-card-hover: #224d42;
+  --color-border: #2d554a;
+  --color-text-primary: #ecfdf5;
+  --color-text-secondary: #a7f3d0;
+  --color-text-muted: #6ee7b7;
 
   --shadow-card: none;
-  --shadow-card-hover: 0 4px 20px rgba(0, 0, 0, 0.4);
+  --shadow-card-hover: 0 4px 20px rgba(52, 211, 153, 0.1);
 }
 
-/* 暮紫 (Violet & Slate) */
-[data-theme="cyber"] {
+/* 夢幻粉紫 (Dreamy Pastel Purple) */
+[data-theme="purple"] {
   color-scheme: dark;
-  --color-primary: #8b5cf6;
-  --color-primary-hover: #7c3aed;
-  --color-primary-text: #ffffff;
-  --color-profit: #14b8a6;
-  --color-profit-bg: rgba(20, 184, 166, 0.15);
-  --color-loss: #f43f5e;
-  --color-loss-bg: rgba(244, 63, 94, 0.15);
+  --color-primary: #f472b6;
+  --color-primary-hover: #ec4899;
+  --color-primary-text: #000000;
+  --color-profit: #2dd4bf;
+  --color-profit-bg: rgba(45, 212, 191, 0.15);
+  --color-loss: #fb7185;
+  --color-loss-bg: rgba(251, 113, 133, 0.15);
 
-  --color-bg-primary: #0b0415;
-  --color-bg-secondary: #000000;
-  --color-bg-card: #150a2e;
-  --color-bg-card-hover: #221245;
-  --color-border: #311a61;
-  --color-text-primary: #f5f3ff;
-  --color-text-secondary: #a78bfa;
-  --color-text-muted: #8b5cf6;
+  --color-bg-primary: #332d41;
+  --color-bg-secondary: #272233;
+  --color-bg-card: #423a54;
+  --color-bg-card-hover: #504666;
+  --color-border: #5e5475;
+  --color-text-primary: #fdfdfd;
+  --color-text-secondary: #e2e1e6;
+  --color-text-muted: #b5b3bd;
 
   --shadow-card: none;
-  --shadow-card-hover: 0 4px 20px rgba(139, 92, 246, 0.1)
-    /* highlight shadow */
-  ;
+  --shadow-card-hover: 0 4px 20px rgba(244, 114, 182, 0.15);
 }
 
 /* === Global Styles === */

@@ -257,7 +257,7 @@ export default function DashboardPage() {
                             style={{
                                 padding: '6px 12px',
                                 background: displayCurrency === 'TWD' ? 'var(--color-primary)' : 'transparent',
-                                color: displayCurrency === 'TWD' ? '#fff' : 'var(--color-text-muted)',
+                                color: displayCurrency === 'TWD' ? 'var(--color-primary-text)' : 'var(--color-text-muted)',
                                 border: 'none',
                                 cursor: 'pointer',
                                 fontSize: '0.85rem',
@@ -271,7 +271,7 @@ export default function DashboardPage() {
                             style={{
                                 padding: '6px 12px',
                                 background: displayCurrency === 'USD' ? 'var(--color-primary)' : 'transparent',
-                                color: displayCurrency === 'USD' ? '#fff' : 'var(--color-text-muted)',
+                                color: displayCurrency === 'USD' ? 'var(--color-primary-text)' : 'var(--color-text-muted)',
                                 border: 'none',
                                 cursor: 'pointer',
                                 fontSize: '0.85rem',

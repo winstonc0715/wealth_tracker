@@ -15,9 +15,10 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         { id: 'vanilla', name: '溫潤米白 (Vanilla Cream)', bg: '#fdfbf7', primary: '#8b5a2b' },
         { id: 'silver', name: '俐落銀灰 (Silver Steel)', bg: '#f1f5f9', primary: '#0ea5e9' },
         { id: 'slate', name: '深邃湛藍 (Slate & Indigo)', bg: '#0f172a', primary: '#6366f1' },
-        { id: 'obsidian', name: '黑曜 (Onyx & Zinc)', bg: '#000000', primary: '#fafafa' },
-        { id: 'forest', name: '蒼翠森林 (Emerald & Neutral)', bg: '#0a0a0a', primary: '#10b981' },
-        { id: 'cyber', name: '賽博暮紫 (Violet & Slate)', bg: '#0b0415', primary: '#8b5cf6' },
+        { id: 'ocean', name: '海洋深藍 (Deep Blue Ocean)', bg: '#11182a', primary: '#3b82f6' },
+        { id: 'gold', name: '奢華黑金 (Luxury Charcoal)', bg: '#141414', primary: '#f59e0b' },
+        { id: 'forest', name: '靜謐幽綠 (Serene Forest)', bg: '#132a24', primary: '#34d399' },
+        { id: 'purple', name: '夢幻粉紫 (Dreamy Purple)', bg: '#332d41', primary: '#f472b6' },
     ] as const;
 
     return (
