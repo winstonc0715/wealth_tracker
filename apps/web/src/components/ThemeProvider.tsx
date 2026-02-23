@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
-type Theme = 'default' | 'vanilla' | 'silver' | 'slate' | 'ocean' | 'gold' | 'forest' | 'purple';
+type Theme = 'default' | 'vanilla' | 'silver' | 'slate' | 'gold' | 'forest' | 'purple';
 
 interface ThemeContextType {
     theme: Theme;

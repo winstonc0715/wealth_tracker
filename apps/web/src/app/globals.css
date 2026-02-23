@@ -98,29 +98,6 @@
   --shadow-card-hover: 0 4px 20px rgba(0, 0, 0, 0.4);
 }
 
-/* 海洋深藍 (Deep Blue Ocean) */
-[data-theme="ocean"] {
-  color-scheme: dark;
-  --color-primary: #3b82f6;
-  --color-primary-hover: #2563eb;
-  --color-primary-text: #ffffff;
-  --color-profit: #10b981;
-  --color-profit-bg: rgba(16, 185, 129, 0.15);
-  --color-loss: #ef4444;
-  --color-loss-bg: rgba(239, 68, 68, 0.15);
-
-  --color-bg-primary: #11182a;
-  --color-bg-secondary: #0b1120;
-  --color-bg-card: #1e293b;
-  --color-bg-card-hover: #29384e;
-  --color-border: #334155;
-  --color-text-primary: #f8fafc;
-  --color-text-secondary: #94a3b8;
-  --color-text-muted: #64748b;
-
-  --shadow-card: none;
-  --shadow-card-hover: 0 4px 20px rgba(59, 130, 246, 0.15);
-}
 
 /* 奢華黑金 (Luxury Gold & Charcoal) */
 [data-theme="gold"] {

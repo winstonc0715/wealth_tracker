@@ -15,7 +15,6 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         { id: 'vanilla', name: '溫潤米白 (Vanilla Cream)', bg: '#fdfbf7', primary: '#8b5a2b' },
         { id: 'silver', name: '俐落銀灰 (Silver Steel)', bg: '#f1f5f9', primary: '#0ea5e9' },
         { id: 'slate', name: '深邃湛藍 (Slate & Indigo)', bg: '#0f172a', primary: '#6366f1' },
-        { id: 'ocean', name: '海洋深藍 (Deep Blue Ocean)', bg: '#11182a', primary: '#3b82f6' },
         { id: 'gold', name: '奢華黑金 (Luxury Charcoal)', bg: '#141414', primary: '#f59e0b' },
         { id: 'forest', name: '靜謐幽綠 (Serene Forest)', bg: '#132a24', primary: '#34d399' },
         { id: 'purple', name: '夢幻粉紫 (Dreamy Purple)', bg: '#332d41', primary: '#f472b6' },
