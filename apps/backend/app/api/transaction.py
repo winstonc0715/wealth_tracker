@@ -242,8 +242,10 @@ async def delete_transaction(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         await db.rollback()
+        import traceback
+        err_msg = traceback.format_exc()
         logger.exception(f"刪除交易失敗: {tx_id}")
-        raise HTTPException(status_code=500, detail=f"伺服器錯誤: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"刪除失敗內部錯誤: {str(e)}\n\nTraceback:\n{err_msg}")
 
 # === 券商同步路由 ===
 
