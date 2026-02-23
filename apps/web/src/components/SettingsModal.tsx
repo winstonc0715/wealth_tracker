@@ -11,10 +11,10 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     const { theme, setTheme } = useTheme();
 
     const themes = [
-        { id: 'default', name: '深邃藍 (Midnight Blue)', bg: '#0a0a1a', primary: '#6366f1' },
-        { id: 'obsidian', name: '曜石黑 (Obsidian Black)', bg: '#000000', primary: '#a3a3a3' },
-        { id: 'forest', name: '森林綠 (Forest Green)', bg: '#022c22', primary: '#10b981' },
-        { id: 'cyber', name: '霓虹紫 (Cyber Purple)', bg: '#190028', primary: '#d946ef' },
+        { id: 'default', name: '湛藍 (Slate & Indigo)', bg: '#0f172a', primary: '#6366f1' },
+        { id: 'obsidian', name: '黑曜 (Onyx & Zinc)', bg: '#000000', primary: '#fafafa' },
+        { id: 'forest', name: '蒼翠 (Emerald & Neutral)', bg: '#0a0a0a', primary: '#10b981' },
+        { id: 'cyber', name: '暮紫 (Violet & Slate)', bg: '#0b0415', primary: '#8b5cf6' },
     ] as const;
 
     return (
