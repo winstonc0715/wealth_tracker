@@ -153,6 +153,26 @@ async def update_transaction(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.post("/recalculate/all", tags=["維護"])
+async def recalculate_all_pnl(
+    db: AsyncSession = Depends(get_db), # Changed from get_async_session to get_db
+    current_user: User = Depends(get_current_user),
+):
+    """手動觸發全系統實現損益重算 (管理員功能)"""
+    # Moved imports to top for consistency, but keeping them here as per user's snippet structure
+    from app.config import get_settings
+    
+    settings = get_settings()
+    if current_user.email not in settings.admin_email_list:
+        raise HTTPException(status_code=403, detail="僅限管理員執行")
+    
+    service = TransactionService(db)
+    result = await service.recalculate_all_portfolios()
+    await db.commit()
+    
+    return {"message": "全系統損益重算完成", "detail": result}
+
+
 @router.delete("/{tx_id}", response_model=ApiResponse[bool])
 async def delete_transaction(
     tx_id: str,

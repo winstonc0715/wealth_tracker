@@ -171,7 +171,35 @@ class TransactionService:
         
         position.total_quantity = current_qty
         position.avg_cost = current_avg_cost
-        position.updated_at = func.now()
+        position.updated_at = sa.func.now()
+
+    async def recalculate_all_portfolios(self) -> dict:
+        """
+        遍歷所有投資組合與標的，重新計算所有損益（強修復模式）
+        """
+        from app.models.portfolio import Portfolio
+        
+        # 取得所有 Portfolios
+        stmt = select(Portfolio)
+        result = await self.db.execute(stmt)
+        portfolios = result.scalars().all()
+        
+        recalculated_count = 0
+        for p in portfolios:
+            # 取得該投資組合下所有的標的 (Symbols)
+            stmt_sym = (
+                select(Transaction.symbol)
+                .where(Transaction.portfolio_id == p.id)
+                .distinct()
+            )
+            res_sym = await self.db.execute(stmt_sym)
+            symbols = res_sym.scalars().all()
+            
+            for symbol in symbols:
+                await self.recalculate_position(p.id, symbol)
+                recalculated_count += 1
+                
+        return {"portfolios": len(portfolios), "symbols": recalculated_count}
 
     async def _update_position(self, tx: Transaction) -> None:
         """根據交易類型更新持倉並計算已實現損益"""

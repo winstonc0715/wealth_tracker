@@ -17,6 +17,9 @@ export default function TransactionsPage() {
     // 編輯 Modal 狀態
     const [editingTx, setEditingTx] = useState<Transaction | null>(null);
     const [editNote, setEditNote] = useState('');
+    const [editQuantity, setEditQuantity] = useState<number>(0);
+    const [editPrice, setEditPrice] = useState<number>(0);
+    const [editFee, setEditFee] = useState<number>(0);
     const [isUpdating, setIsUpdating] = useState(false);
 
     useEffect(() => {
@@ -39,7 +42,6 @@ export default function TransactionsPage() {
         } catch (error) {
             console.error('取得交易紀錄失敗:', error);
         } finally {
-            setIsLoading(true); // 這裡故意寫成 true？不，應該是 false
             setIsLoading(false);
         }
     };
@@ -59,7 +61,12 @@ export default function TransactionsPage() {
         if (!editingTx) return;
         setIsUpdating(true);
         try {
-            await apiClient.updateTransaction(editingTx.id, { note: editNote });
+            await apiClient.updateTransaction(editingTx.id, {
+                note: editNote,
+                quantity: editQuantity,
+                unit_price: editPrice,
+                fee: editFee
+            });
             setEditingTx(null);
             await fetchTransactions();
             await refreshAll();
@@ -143,6 +150,9 @@ export default function TransactionsPage() {
                                                 onClick={() => {
                                                     setEditingTx(tx);
                                                     setEditNote(tx.note || '');
+                                                    setEditQuantity(tx.quantity);
+                                                    setEditPrice(tx.unit_price);
+                                                    setEditFee(tx.fee);
                                                 }}
                                             >
                                                 編輯
@@ -183,19 +193,55 @@ export default function TransactionsPage() {
                     position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, backdropFilter: 'blur(4px)'
                 }} onClick={() => setEditingTx(null)}>
-                    <div className="card-glass" style={{ maxWidth: '400px', width: '100%' }} onClick={e => e.stopPropagation()}>
-                        <h3 style={{ marginBottom: '16px' }}>📝 編輯備註</h3>
-                        <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '12px' }}>
+                    <div className="card-glass" style={{ maxWidth: '450px', width: '90%' }} onClick={e => e.stopPropagation()}>
+                        <h3 style={{ marginBottom: '16px' }}>📝 編輯交易</h3>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '20px' }}>
                             標的: {editingTx.symbol} ({editingTx.asset_name})
                         </p>
-                        <textarea
-                            className="input-field"
-                            style={{ height: '100px', resize: 'none' }}
-                            value={editNote}
-                            onChange={e => setEditNote(e.target.value)}
-                            placeholder="輸入交易備註..."
-                        />
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                            <div>
+                                <label style={labelStyle}>數量</label>
+                                <input
+                                    type="number"
+                                    className="input-field"
+                                    value={editQuantity}
+                                    onChange={e => setEditQuantity(Number(e.target.value))}
+                                />
+                            </div>
+                            <div>
+                                <label style={labelStyle}>單價</label>
+                                <input
+                                    type="number"
+                                    className="input-field"
+                                    value={editPrice}
+                                    onChange={e => setEditPrice(Number(e.target.value))}
+                                />
+                            </div>
+                        </div>
+
+                        <div style={{ marginBottom: '16px' }}>
+                            <label style={labelStyle}>手續費</label>
+                            <input
+                                type="number"
+                                className="input-field"
+                                value={editFee}
+                                onChange={e => setEditFee(Number(e.target.value))}
+                            />
+                        </div>
+
+                        <div style={{ marginBottom: '20px' }}>
+                            <label style={labelStyle}>備註</label>
+                            <textarea
+                                className="input-field"
+                                style={{ height: '80px', resize: 'none' }}
+                                value={editNote}
+                                onChange={e => setEditNote(e.target.value)}
+                                placeholder="輸入交易備註..."
+                            />
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
                             <button className="btn-secondary" onClick={() => setEditingTx(null)}>取消</button>
                             <button className="btn-primary" onClick={handleUpdate} disabled={isUpdating}>
                                 {isUpdating ? '儲存中...' : '確定儲存'}
@@ -210,6 +256,7 @@ export default function TransactionsPage() {
 
 const thStyle: React.CSSProperties = { padding: '16px', textAlign: 'left', color: 'var(--color-text-muted)', fontSize: '0.85rem', fontWeight: 600 };
 const tdStyle: React.CSSProperties = { padding: '16px', fontSize: '0.9rem' };
+const labelStyle: React.CSSProperties = { display: 'block', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '4px' };
 
 const getTxTypeLabel = (type: string) => {
     switch (type) {
