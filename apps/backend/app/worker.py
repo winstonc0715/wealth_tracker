@@ -13,7 +13,9 @@ from sqlalchemy import select, distinct
 from app.database import async_session
 from app.models.position import CurrentPosition
 from app.models.asset_category import AssetCategory
+from app.models.portfolio import Portfolio
 from app.price.manager import PriceManager
+from app.services.portfolio_service import PortfolioService
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +60,38 @@ async def sync_all_prices():
         logger.error("背景同步全站報價失敗: %s", e)
 
 
+async def record_all_portfolios_snapshot():
+    """
+    背景排程任務：遍歷全站所有投資組合，儲存當前淨值快照
+    """
+    logger.info("開始記錄全站投資組合淨值快照...")
+    
+    try:
+        async with async_session() as session:
+            # 取得所有投資組合
+            stmt = select(Portfolio)
+            result = await session.execute(stmt)
+            portfolios = result.scalars().all()
+            
+            if not portfolios:
+                logger.info("沒有任何投資組合需要記錄。")
+                return
+            
+            # 使用 PortfolioService 進行儲存
+            service = PortfolioService(session)
+            for pf in portfolios:
+                try:
+                    await service.save_net_worth_snapshot(pf.id)
+                except Exception as ex:
+                    logger.error("記錄投資組合 %s 淨值失敗: %s", pf.id, ex)
+            
+            await session.commit()
+            logger.info("背景記錄全站淨值快照完成 (共 %d 個投資組合)", len(portfolios))
+            
+    except Exception as e:
+        logger.error("背景記錄全站淨值快照失敗: %s", e)
+
+
 def setup_worker():
     """設定並啟動排程器"""
     # 設定每 1 分鐘執行一次
@@ -66,6 +100,14 @@ def setup_worker():
         'interval', 
         minutes=1, 
         id='sync_all_prices_job',
+        replace_existing=True
+    )
+    # 設定每 1 小時記錄一次淨值 (save_net_worth_snapshot 會自動處理當日更新)
+    scheduler.add_job(
+        record_all_portfolios_snapshot,
+        'interval',
+        hours=1,
+        id='record_all_portfolios_snapshot_job',
         replace_existing=True
     )
     scheduler.start()
