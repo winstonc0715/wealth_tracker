@@ -200,6 +200,12 @@ class ApiClient {
         });
     }
 
+    async recalculatePortfolioPnl(portfolioId: string) {
+        return this.request<{ message: string, detail: any }>(`/transactions/recalculate/portfolio/${portfolioId}`, {
+            method: 'POST',
+        });
+    }
+
     // === Broker ===
     async importCSV(portfolioId: string, file: File, brokerFormat = 'standard', categoryId = 1) {
         const formData = new FormData();

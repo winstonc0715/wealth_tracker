@@ -18,7 +18,7 @@ from app.broker.reconciliation import ReconciliationService
 from app.services.transaction_service import TransactionService
 from app.schemas.common import ApiResponse, PaginatedResponse
 from app.schemas.transaction import (
-    TransactionCreate, TransactionResponse,
+    TransactionCreate, TransactionResponse, TransactionUpdate,
     CSVImportResult, ReconciliationResult,
 )
 from app.api.auth import get_current_user
@@ -127,7 +127,7 @@ async def get_transactions(
 @router.patch("/{tx_id}", response_model=ApiResponse[TransactionResponse])
 async def update_transaction(
     tx_id: str,
-    data: "TransactionUpdate",
+    data: TransactionUpdate,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -144,12 +144,14 @@ async def update_transaction(
     service = TransactionService(db)
     try:
         updated_tx = await service.update_transaction(tx_id, data)
+        await db.commit()
         await db.refresh(updated_tx)
         return ApiResponse(
             data=TransactionResponse.model_validate(updated_tx),
             message="交易已更新，損益已重新計算"
         )
     except ValueError as e:
+        await db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -171,6 +173,38 @@ async def recalculate_all_pnl(
     await db.commit()
     
     return {"message": "全系統損益重算完成", "detail": result}
+
+@router.post("/recalculate/portfolio/{portfolio_id}", tags=["維護"])
+async def recalculate_portfolio_pnl(
+    portfolio_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """手動觸發單一投資組合實現損益重算"""
+    # 檢查權限
+    portfolio = await db.get(Portfolio, portfolio_id)
+    if not portfolio or portfolio.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="無權限操作此投資組合")
+        
+    from sqlalchemy import select
+    from app.models.transaction import Transaction
+    service = TransactionService(db)
+    
+    stmt_sym = (
+        select(Transaction.symbol)
+        .where(Transaction.portfolio_id == portfolio_id)
+        .distinct()
+    )
+    res_sym = await db.execute(stmt_sym)
+    symbols = res_sym.scalars().all()
+    
+    recalculated_count = 0
+    for symbol in symbols:
+        await service.recalculate_position(portfolio_id, symbol)
+        recalculated_count += 1
+        
+    await db.commit()
+    return {"message": "該投資組合損益重算完成", "detail": {"symbols": recalculated_count}}
 
 
 @router.delete("/{tx_id}", response_model=ApiResponse[bool])

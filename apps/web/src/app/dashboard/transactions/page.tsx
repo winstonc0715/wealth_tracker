@@ -21,6 +21,7 @@ export default function TransactionsPage() {
     const [editPrice, setEditPrice] = useState<number>(0);
     const [editFee, setEditFee] = useState<number>(0);
     const [isUpdating, setIsUpdating] = useState(false);
+    const [isRecalculating, setIsRecalculating] = useState(false);
 
     useEffect(() => {
         if (!selectedPortfolio) {
@@ -77,6 +78,23 @@ export default function TransactionsPage() {
         }
     };
 
+    const handleRecalculateAll = async () => {
+        if (!selectedPortfolio) return;
+        if (!confirm('將會重新計算本組合所有的歷史持倉與實現損益，確定執行嗎？')) return;
+
+        setIsRecalculating(true);
+        try {
+            await apiClient.recalculatePortfolioPnl(selectedPortfolio.id);
+            alert('歷史損益重算完成！');
+            await fetchTransactions();
+            await refreshAll();
+        } catch (error) {
+            alert('重算失敗: ' + (error as Error).message);
+        } finally {
+            setIsRecalculating(false);
+        }
+    };
+
     const formatCurrency = (value: number) => {
         let num = Number(value || 0);
         if (displayCurrency === 'USD') {
@@ -99,6 +117,16 @@ export default function TransactionsPage() {
                             ← 返回
                         </button>
                         <h1 style={{ fontSize: '1.5rem', fontWeight: 800 }}>交易管理中心</h1>
+                    </div>
+                    <div>
+                        <button
+                            className="btn-secondary"
+                            style={{ padding: '8px 16px' }}
+                            onClick={handleRecalculateAll}
+                            disabled={isRecalculating}
+                        >
+                            {isRecalculating ? '重算中...' : '⟳ 重算歷史損益'}
+                        </button>
                     </div>
                 </div>
 
