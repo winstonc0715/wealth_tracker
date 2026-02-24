@@ -274,17 +274,18 @@ class PortfolioService:
         """
         取得投資組合歷史淨值走勢（供走勢圖使用）
         
-        邏輯：
-        1. 撈取過去 N 天的 HistoricalNetWorth 紀錄
-        2. 若今日尚未有紀錄，自動使用當前即時淨值補上一筆
-        3. 若某些天數沒有紀錄，使用前一天的淨值自動補齊，確保圖表平滑
+        若 HistoricalNetWorth 快照充足則直接使用；否則啟動「歷史淨值回溯引擎」，
+        將過去所有交易紀錄逐日回放，並乘上當天個股的真實歷史收盤價，精確還原歷史波段。
         """
         from datetime import date, timedelta
-        
-        # 1. 取得歷史資料
+        from sqlalchemy.orm import selectinload
+        from app.models.transaction import Transaction
+        from app.models.asset_category import AssetCategory
+
         today = date.today()
         start_date = today - timedelta(days=days-1)
-        
+
+        # 1. 取得歷史快照
         stmt = (
             select(HistoricalNetWorth)
             .where(HistoricalNetWorth.portfolio_id == portfolio_id)
@@ -293,36 +294,166 @@ class PortfolioService:
         )
         result = await self.db.execute(stmt)
         records = result.scalars().all()
-        
         record_map = {r.snapshot_date: r.net_worth for r in records}
-        
-        # 2. 如果今日無紀錄，算出即時淨值補上
+
+        # 為了保證即時圖表尾巴正確，今天若沒快照，自動補即時淨值
         if today not in record_map:
             try:
                 summary = await self.get_summary(portfolio_id, force_refresh)
                 record_map[today] = summary.net_worth
             except Exception:
-                pass # 計算失敗忽略，圖表當天沒點
-        
-        # 3. 補齊缺漏天數
-        history = []
-        last_known_value = Decimal("0")
-        
-        # 從資料庫找第一筆前的最後已知淨值（這裡簡化，直接用期間內第一筆做回推填充）
-        if records:
+                pass
+
+        # 若快照涵蓋率達 80% 且至少有 2 天資料，則信任快照，使用簡單插值補齊缺漏
+        # （新建的投資組合通常 records 是 0 或 1，將進入回溯模式）
+        if len(records) > (days * 0.8) and len(records) > 1:
+            history = []
             last_known_value = records[0].net_worth
-        elif record_map:
-            last_known_value = next(iter(record_map.values()))
+            for i in range(days):
+                current_date = start_date + timedelta(days=i)
+                if current_date in record_map:
+                    last_known_value = record_map[current_date]
+                history.append(NetWorthHistoryItem(
+                    date=f"{current_date.month}/{current_date.day}",
+                    value=last_known_value
+                ))
+            return PortfolioHistoryResponse(portfolio_id=portfolio_id, history=history)
+
+        # ====================
+        # 啟動歷史淨值回溯引擎
+        # ====================
+        logger.info(f"啟動歷史淨值回溯引擎 (Portfolio: {portfolio_id}, Days: {days})")
+
+        # A. 撈取所有該帳戶的交易紀錄 (由古至今)
+        stmt_tx = (
+            select(Transaction, AssetCategory.slug)
+            .join(AssetCategory, Transaction.category_id == AssetCategory.id)
+            .where(Transaction.portfolio_id == portfolio_id)
+            .order_by(Transaction.executed_at.asc())
+        )
+        tx_result = await self.db.execute(stmt_tx)
+        tx_records = tx_result.all()
+
+        if not tx_records:
+            # 毫無交易紀錄，給條 0 的死心電圖
+            history = []
+            for i in range(days):
+                d = start_date + timedelta(days=i)
+                history.append(NetWorthHistoryItem(date=f"{d.month}/{d.day}", value=Decimal("0")))
+            return PortfolioHistoryResponse(portfolio_id=portfolio_id, history=history)
+
+        # B. 取出需要歷史報價的所有標的，並批次抓取
+        symbols_to_fetch = set()
+        for tx, slug in tx_records:
+            if slug not in ("fiat", "liability"):
+                symbols_to_fetch.add((tx.symbol, slug))
+
+        timeframe = "1M"
+        if days > 30: timeframe = "3M"
+        if days > 90: timeframe = "1Y"
+        if days > 365: timeframe = "5Y"
+
+        import asyncio
+        fetch_tasks = []
+        for sym, slug in symbols_to_fetch:
+            fetch_tasks.append(self.price_manager.get_historical_prices(sym, slug, timeframe))
+        
+        prices_results = await asyncio.gather(*fetch_tasks, return_exceptions=True)
+
+        history_prices = {}
+        for (sym, _), p_result in zip(symbols_to_fetch, prices_results):
+            if isinstance(p_result, Exception) or not p_result:
+                history_prices[sym] = {}
+                continue
+            history_prices[sym] = {p.date.date(): p.close for p in p_result}
+
+        # B-2. 由於歷史報價可能不含「今天即時正在跳動的價格」，也為它們補上 fallback
+        current_prices = {}
+        for sym, slug in symbols_to_fetch:
+            try:
+                cp = await self.price_manager.get_price(sym, slug)
+                current_prices[sym] = cp.price
+            except Exception:
+                current_prices[sym] = Decimal("0")
+
+        # 提供 TWD 匯率轉換
+        usd_twd_rate = Decimal("32.0")
+        try:
+            rate_data = await self.price_manager.get_price("TWD=X", "us_stock")
+            if rate_data.price > 0: usd_twd_rate = rate_data.price
+        except Exception:
+            pass
+
+        def get_price_for_date(sym: str, target_date: date) -> Decimal:
+            # 今天或未來 -> 即時報價
+            if target_date >= today:
+                return current_prices.get(sym, Decimal("0"))
             
+            p_dict = history_prices.get(sym, {})
+            if target_date in p_dict:
+                return p_dict[target_date]
+            
+            # 若當天無報價（例如假日），往前找最多 7 天
+            for j in range(1, 8):
+                prev_date = target_date - timedelta(days=j)
+                if prev_date in p_dict:
+                    return p_dict[prev_date]
+            
+            # 真的找不到歷史（可能是 timeframe 沒抓夠長，或是下市），拿最新價暫代
+            return current_prices.get(sym, Decimal("0"))
+
+        # C. 逐日回溯推演 (Replay)
+        holdings = {} # (symbol, slug) -> quantity
+        tx_idx = 0
+        total_txs = len(tx_records)
+        history = []
+
+        # 在這 N 天之前，先把以前的交易執行完，為庫存打底
+        while tx_idx < total_txs and tx_records[tx_idx][0].executed_at.date() < start_date:
+            tx, slug = tx_records[tx_idx]
+            key = (tx.symbol, slug)
+            qty = Decimal(str(tx.quantity))
+            if tx.tx_type in ("buy", "deposit", "dividend"):
+                holdings[key] = holdings.get(key, Decimal("0")) + qty
+            elif tx.tx_type in ("sell", "withdraw"):
+                holdings[key] = holdings.get(key, Decimal("0")) - qty
+            tx_idx += 1
+
+        # 開始印出視窗內的每一天
         for i in range(days):
             current_date = start_date + timedelta(days=i)
-            
-            if current_date in record_map:
-                last_known_value = record_map[current_date]
+
+            # 把發生在今天的交易結算進來
+            while tx_idx < total_txs and tx_records[tx_idx][0].executed_at.date() == current_date:
+                tx, slug = tx_records[tx_idx]
+                key = (tx.symbol, slug)
+                qty = Decimal(str(tx.quantity))
+                if tx.tx_type in ("buy", "deposit", "dividend"):
+                    holdings[key] = holdings.get(key, Decimal("0")) + qty
+                elif tx.tx_type in ("sell", "withdraw"):
+                    holdings[key] = holdings.get(key, Decimal("0")) - qty
+                tx_idx += 1
+
+            # 根據今天的持倉總數，算出現值
+            daily_net_worth = Decimal("0")
+            for (sym, slug), qty in holdings.items():
+                if qty == 0: continue
                 
+                if slug == "liability":
+                    daily_net_worth -= qty
+                elif slug == "fiat":
+                    daily_net_worth += qty
+                else:
+                    price = get_price_for_date(sym, current_date)
+                    mult = usd_twd_rate if slug in ("us_stock", "crypto") else Decimal("1")
+                    daily_net_worth += (qty * price * mult)
+
+            # 若今天有快照則無條件信任快照，否則用回推算出的值
+            final_val = record_map.get(current_date, daily_net_worth)
+
             history.append(NetWorthHistoryItem(
                 date=f"{current_date.month}/{current_date.day}",
-                value=last_known_value
+                value=final_val
             ))
 
         return PortfolioHistoryResponse(

@@ -190,6 +190,27 @@ class PriceManager:
 
         return results
 
+    async def get_historical_prices(
+        self, symbol: str, category_slug: str, timeframe: str = "1M"
+    ) -> list[HistoricalPrice]:
+        """
+        取得歷史報價
+        """
+        provider_name = CATEGORY_PROVIDER_MAP.get(category_slug, "")
+        if category_slug in ("fiat", "liability"):
+            return []
+
+        provider = self._providers.get(provider_name)
+        if not provider or not hasattr(provider, "get_historical_prices"):
+            logger.warning("找不到支援 %s 的歷史報價提供者", category_slug)
+            return []
+
+        try:
+            return await provider.get_historical_prices(symbol, timeframe)
+        except Exception as e:
+            logger.warning("取得 %s 的歷史報價失敗: %s", symbol, e)
+            return []
+
     async def search_symbol(self, query: str, category_slug: str | None = None) -> list[SearchResult]:
         """
         搜尋標的
