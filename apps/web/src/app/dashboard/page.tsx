@@ -53,7 +53,7 @@ export default function DashboardPage() {
     const [assetName, setAssetName] = useState('');
     const [quantity, setQuantity] = useState('');
     const [unitPrice, setUnitPrice] = useState('');
-    const [fee, setFee] = useState('0');
+    const [totalCost, setTotalCost] = useState('');
     const [currency, setCurrency] = useState('TWD');
     const [txDate, setTxDate] = useState(new Date().toISOString().slice(0, 16));
     const [txNote, setTxNote] = useState('');
@@ -132,7 +132,7 @@ export default function DashboardPage() {
         setAssetName('');
         setQuantity('');
         setUnitPrice('');
-        setFee('0');
+        setTotalCost('');
         setCurrency('TWD');
         setTxDate(new Date().toISOString().slice(0, 16));
         setTxNote('');
@@ -146,7 +146,7 @@ export default function DashboardPage() {
             return;
         }
         if (!symbol.trim() || !quantity || !unitPrice) {
-            setTxError('請填寫標的代碼、數量和單價');
+            setTxError('請填寫標的代碼、數量和均價');
             return;
         }
 
@@ -163,7 +163,7 @@ export default function DashboardPage() {
                 tx_type: txType,
                 quantity: parseFloat(quantity),
                 unit_price: parseFloat(unitPrice),
-                fee: parseFloat(fee || '0'),
+                fee: 0,
                 currency,
                 executed_at: new Date(txDate).toISOString(),
                 note: txNote || undefined,
@@ -194,9 +194,43 @@ export default function DashboardPage() {
     };
 
     // 預覽金額
-    const previewAmount = quantity && unitPrice
-        ? (parseFloat(quantity) * parseFloat(unitPrice) + parseFloat(fee || '0'))
-        : 0;
+    const previewAmount = parseFloat(totalCost || '0');
+
+    const handleQuantityChange = (val: string) => {
+        setQuantity(val);
+        const q = parseFloat(val);
+        const p = parseFloat(unitPrice);
+        const t = parseFloat(totalCost);
+        if (q > 0) {
+            if (unitPrice && !totalCost) setTotalCost((q * p).toString());
+            else if (totalCost && !unitPrice) setUnitPrice((t / q).toString());
+            else if (unitPrice && totalCost) setTotalCost((q * p).toString());
+        }
+    };
+
+    const handlePriceChange = (val: string) => {
+        setUnitPrice(val);
+        const q = parseFloat(quantity);
+        const p = parseFloat(val);
+        const t = parseFloat(totalCost);
+        if (p > 0) {
+            if (quantity && !totalCost) setTotalCost((q * p).toString());
+            else if (totalCost && !quantity) setQuantity((t / p).toString());
+            else if (quantity && totalCost) setTotalCost((q * p).toString());
+        }
+    };
+
+    const handleTotalCostChange = (val: string) => {
+        setTotalCost(val);
+        const q = parseFloat(quantity);
+        const p = parseFloat(unitPrice);
+        const t = parseFloat(val);
+        if (t > 0) {
+            if (quantity && !unitPrice) setUnitPrice((t / q).toString());
+            else if (unitPrice && !quantity) setQuantity((t / p).toString());
+            else if (quantity && unitPrice) setUnitPrice((t / q).toString());
+        }
+    };
 
     return (
         <div style={{ minHeight: '100vh', background: 'var(--color-bg-primary)' }}>
@@ -528,26 +562,26 @@ export default function DashboardPage() {
                             </div>
                         </div>
 
-                        {/* 數量 + 單價 */}
+                        {/* 數量 + 均價 */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                             <div>
                                 <label style={labelStyle}>數量 *</label>
                                 <input className="input-field" placeholder="0" type="number" step="any"
-                                    value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+                                    value={quantity} onChange={(e) => handleQuantityChange(e.target.value)} />
                             </div>
                             <div>
-                                <label style={labelStyle}>單價 *</label>
+                                <label style={labelStyle}>均價 *</label>
                                 <input className="input-field" placeholder="0.00" type="number" step="any"
-                                    value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} />
+                                    value={unitPrice} onChange={(e) => handlePriceChange(e.target.value)} />
                             </div>
                         </div>
 
-                        {/* 手續費 + 幣別 */}
+                        {/* 總成本 + 幣別 */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                             <div>
-                                <label style={labelStyle}>手續費</label>
+                                <label style={labelStyle}>總成本</label>
                                 <input className="input-field" placeholder="0" type="number" step="any"
-                                    value={fee} onChange={(e) => setFee(e.target.value)} />
+                                    value={totalCost} onChange={(e) => handleTotalCostChange(e.target.value)} />
                             </div>
                             <div>
                                 <label style={labelStyle}>幣別</label>
