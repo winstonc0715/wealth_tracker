@@ -308,9 +308,11 @@ class PortfolioService:
         history = []
         last_known_value = Decimal("0")
         
-        # 從資料庫找第一筆前的最後已知淨值（這裡簡化，直接用期間內第一筆）
+        # 從資料庫找第一筆前的最後已知淨值（這裡簡化，直接用期間內第一筆做回推填充）
         if records:
             last_known_value = records[0].net_worth
+        elif record_map:
+            last_known_value = next(iter(record_map.values()))
             
         for i in range(days):
             current_date = start_date + timedelta(days=i)
@@ -318,18 +320,10 @@ class PortfolioService:
             if current_date in record_map:
                 last_known_value = record_map[current_date]
                 
-            # 只有在有過歷史記錄後才開始加入圖表，或者初始就有值
-            if last_known_value > 0 or current_date in record_map:
-                history.append(NetWorthHistoryItem(
-                    date=f"{current_date.month}/{current_date.day}",
-                    value=last_known_value
-                ))
-            else:
-                # 若連第一筆紀錄都還沒出現，淨值為 0
-                history.append(NetWorthHistoryItem(
-                    date=f"{current_date.month}/{current_date.day}",
-                    value=Decimal("0")
-                ))
+            history.append(NetWorthHistoryItem(
+                date=f"{current_date.month}/{current_date.day}",
+                value=last_known_value
+            ))
 
         return PortfolioHistoryResponse(
             portfolio_id=portfolio_id,

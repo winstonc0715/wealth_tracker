@@ -30,13 +30,19 @@ const PERIOD_DAYS: Record<string, number> = {
 };
 
 export default function NetWorthChart({ data }: NetWorthChartProps) {
-    const { selectedPortfolio, fetchHistory, displayCurrency, exchangeRate } = usePortfolioStore();
-    const [activePeriod, setActivePeriod] = useState('1M');
+    const { selectedPortfolio, fetchHistory, displayCurrency, exchangeRate, historyDays, setHistoryDays } = usePortfolioStore();
+
+    // 從 historyDays 反推 activePeriod
+    let activePeriod = '1M';
+    if (historyDays === 7) activePeriod = '1W';
+    else if (historyDays === 90) activePeriod = '3M';
+    else if (historyDays === 365) activePeriod = '1Y';
 
     const handlePeriodChange = (period: string) => {
-        setActivePeriod(period);
+        const days = PERIOD_DAYS[period];
+        setHistoryDays(days);
         if (selectedPortfolio) {
-            fetchHistory(selectedPortfolio.id, PERIOD_DAYS[period]);
+            fetchHistory(selectedPortfolio.id, days);
         }
     };
 

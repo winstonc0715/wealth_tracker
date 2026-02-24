@@ -26,6 +26,10 @@ interface PortfolioState {
     displayCurrency: 'TWD' | 'USD';
     exchangeRate: number; // 1 USD = ? TWD
 
+    // 時間軸設定
+    historyDays: number;
+    setHistoryDays: (days: number) => void;
+
     // 動作
     fetchPortfolios: () => Promise<void>;
     selectPortfolio: (portfolio: Portfolio) => Promise<void>;
@@ -50,6 +54,9 @@ export const usePortfolioStore = create<PortfolioState>((set, get) => ({
     error: null,
     displayCurrency: 'TWD',
     exchangeRate: 32.0, // 預設值，後續由 API 更新
+    historyDays: 30,
+
+    setHistoryDays: (days) => set({ historyDays: days }),
 
     fetchPortfolios: async () => {
         set({ isLoading: true, error: null });
@@ -109,14 +116,14 @@ export const usePortfolioStore = create<PortfolioState>((set, get) => ({
     },
 
     refreshAll: async (days?: number) => {
-        const { selectedPortfolio } = get();
+        const { selectedPortfolio, historyDays } = get();
         if (selectedPortfolio) {
             set({ isLoading: true });
             await get().fetchExchangeRates();
             await Promise.all([
                 get().fetchSummary(selectedPortfolio.id),
                 get().fetchAllocations(selectedPortfolio.id),
-                get().fetchHistory(selectedPortfolio.id, days),
+                get().fetchHistory(selectedPortfolio.id, days || historyDays),
             ]);
             set({ isLoading: false });
         }
