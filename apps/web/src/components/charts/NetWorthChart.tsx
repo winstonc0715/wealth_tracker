@@ -60,19 +60,20 @@ export default function NetWorthChart({ data }: NetWorthChartProps) {
     const gradientId = 'netWorthGradient';
 
     const formatCurrency = (value: number) => {
-        let val = value;
+        let val = Number(value);
         const prefix = displayCurrency === 'USD' ? '$' : '';
         if (displayCurrency === 'USD') val = val / exchangeRate;
 
         if (val >= 1000000) return `${prefix}${(val / 1000000).toFixed(1)}M`;
         if (val >= 1000) return `${prefix}${(val / 1000).toFixed(0)}K`;
-        return `${prefix}${val.toLocaleString(displayCurrency === 'USD' ? 'en-US' : 'zh-TW', { maximumFractionDigits: 0 })}`;
+        return `${prefix}${val.toLocaleString(displayCurrency === 'USD' ? 'en-US' : 'zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     };
 
-    const tooltipFormatter = (value: number) => {
+    const tooltipFormatter = (value: any) => {
+        const num = Number(value);
         const val = displayCurrency === 'USD'
-            ? `$ ${(value / exchangeRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-            : `NT$ ${value.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            ? `$ ${(num / exchangeRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+            : `NT$ ${num.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         return [val, '淨值'];
     };
 
