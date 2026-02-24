@@ -72,7 +72,7 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
             return `$ ${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         }
 
-        return `NT$ ${num.toLocaleString('zh-TW', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+        return `NT$ ${num.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     };
 
     const handleSort = (column: SortColumn) => {

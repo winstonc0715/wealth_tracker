@@ -72,7 +72,7 @@ export default function NetWorthChart({ data }: NetWorthChartProps) {
     const tooltipFormatter = (value: number) => {
         const val = displayCurrency === 'USD'
             ? `$ ${(value / exchangeRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-            : `NT$ ${value.toLocaleString('zh-TW', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+            : `NT$ ${value.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         return [val, '淨值'];
     };
 
