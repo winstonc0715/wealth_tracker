@@ -51,11 +51,21 @@ class TWStockProvider(PriceProvider):
             raw_price = real_data.get("latest_trade_price", "") or ""
             # 清理價格字串（移除空白、逗號等）
             raw_price = raw_price.strip().replace(",", "")
+            
+            if raw_price == "-":
+                raw_price = ""
+
+            # 處理 13:25-13:30 試撮期間無 latest_trade_price 的狀況
+            if not raw_price:
+                bids = real_data.get("best_bid_price", [])
+                if bids and bids[0] and bids[0] != "-":
+                    raw_price = bids[0].strip().replace(",", "")
+            
             price = Decimal(raw_price) if raw_price else Decimal("0")
 
             if price == 0:
-                # 無成交價時 fallback 至 TWSE API
-                logger.warning(f"twstock {stock_id} 無成交價，切換至 TWSE API")
+                # 無成交價且無買價時 fallback 至 TWSE API
+                logger.warning(f"twstock {stock_id} 無成交價與試撮價，切換至 TWSE API")
                 return self._fetch_from_twse(stock_id)
 
             # 計算漲跌幅
@@ -104,12 +114,23 @@ class TWStockProvider(PriceProvider):
             yesterday_str = stock_data.get("y", "0")
             yesterday = Decimal(yesterday_str) if yesterday_str and yesterday_str != "-" else Decimal("0")
             
-            # z 是當盤成交價，如果為 "-" 代表還沒開盤或沒有成交，就用昨收價
+            # z 是當盤成交價，如果為 "-" 代表還沒開盤或正在試撮 (如 13:25-13:30)
             z_price = stock_data.get("z", "")
             if not z_price or z_price == "-":
-                price = yesterday
+                # 尋求試撮價格 (pz)
+                pz_price = stock_data.get("pz", "")
+                if pz_price and pz_price != "-":
+                    price = Decimal(pz_price.replace(",", ""))
+                else:
+                    # 尋求第一檔委買價 (b)
+                    b_str = stock_data.get("b", "")
+                    b_prices = [p for p in b_str.split("_") if p and p != "-"]
+                    if b_prices:
+                        price = Decimal(b_prices[0].replace(",", ""))
+                    else:
+                        price = yesterday
             else:
-                price = Decimal(z_price)
+                price = Decimal(z_price.replace(",", ""))
 
             change = None
             change_pct = None
