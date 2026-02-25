@@ -161,8 +161,9 @@ class ApiClient {
         return this.request<AllocationResponse>(`/portfolio/${portfolioId}/allocations`);
     }
 
-    async getPortfolioHistory(portfolioId: string, days = 30) {
-        return this.request<PortfolioHistoryResponse>(`/portfolio/${portfolioId}/history?days=${days}`);
+    async getPortfolioHistory(portfolioId: string, days = 30, forceRefresh = false) {
+        const params = `days=${days}${forceRefresh ? '&force_refresh=true' : ''}`;
+        return this.request<PortfolioHistoryResponse>(`/portfolio/${portfolioId}/history?${params}`);
     }
 
     async getExchangeRates() {

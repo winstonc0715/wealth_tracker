@@ -46,6 +46,18 @@ export default function NetWorthChart({ data }: NetWorthChartProps) {
         }
     };
 
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const handleForceRefresh = async () => {
+        if (!selectedPortfolio || isRefreshing) return;
+        setIsRefreshing(true);
+        try {
+            const days = PERIOD_DAYS[activePeriod];
+            await fetchHistory(selectedPortfolio.id, days, true);
+        } finally {
+            setIsRefreshing(false);
+        }
+    };
+
     if (!data || data.length === 0) {
         return (
             <div className="card" style={{ height: '350px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -81,7 +93,20 @@ export default function NetWorthChart({ data }: NetWorthChartProps) {
         <div className="card" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>淨值走勢</h3>
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <button
+                        className="btn-secondary"
+                        style={{
+                            padding: '4px 10px',
+                            fontSize: '0.75rem',
+                            opacity: isRefreshing ? 0.5 : 1,
+                        }}
+                        onClick={handleForceRefresh}
+                        disabled={isRefreshing}
+                        title="清除快照並用歷史收盤價重新計算"
+                    >
+                        {isRefreshing ? '⟳ 重算中...' : '⟳ 重算'}
+                    </button>
                     {['1W', '1M', '3M', '1Y'].map((period) => (
                         <button
                             key={period}

@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     # === 安全性 ===
     secret_key: str = "dev-secret-change-me-in-production"
     jwt_algorithm: str = "HS256"
-    jwt_expire_minutes: int = 1440  # 24 小時
+    jwt_expire_minutes: int = 43200  # 30 天 (30 * 24 * 60)
     admin_emails: str = "demo@wealth.com"  # 逗號分隔的管理員 Email 清單
     google_client_id: str = ""  # Google OAuth Client ID
 

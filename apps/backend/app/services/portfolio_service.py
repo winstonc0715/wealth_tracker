@@ -285,6 +285,17 @@ class PortfolioService:
         today = date.today()
         start_date = today - timedelta(days=days-1)
 
+        # 若強制刷新，先清除所有既有快照以強制重算
+        if force_refresh:
+            from sqlalchemy import delete as sa_delete
+            del_stmt = sa_delete(HistoricalNetWorth).where(
+                HistoricalNetWorth.portfolio_id == portfolio_id,
+                HistoricalNetWorth.snapshot_date >= start_date,
+            )
+            await self.db.execute(del_stmt)
+            await self.db.flush()
+            logger.info("強制刷新：已清除 %s 自 %s 起的快照", portfolio_id, start_date)
+
         # 1. 取得歷史快照
         stmt = (
             select(HistoricalNetWorth)
@@ -304,9 +315,8 @@ class PortfolioService:
             except Exception:
                 pass
 
-        # 若快照涵蓋率達 80% 且至少有 2 天資料，則信任快照，使用簡單插值補齊缺漏
-        # （新建的投資組合通常 records 是 0 或 1，將進入回溯模式）
-        if len(records) > (days * 0.8) and len(records) > 1:
+        # 若快照涵蓋率達 80% 且至少有 2 天資料，且非強制刷新，則信任快照
+        if not force_refresh and len(records) > (days * 0.8) and len(records) > 1:
             history = []
             last_known_value = records[0].net_worth
             for i in range(days):

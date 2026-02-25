@@ -35,7 +35,7 @@ interface PortfolioState {
     selectPortfolio: (portfolio: Portfolio) => Promise<void>;
     fetchSummary: (portfolioId: string) => Promise<void>;
     fetchAllocations: (portfolioId: string) => Promise<void>;
-    fetchHistory: (portfolioId: string, days?: number) => Promise<void>;
+    fetchHistory: (portfolioId: string, days?: number, forceRefresh?: boolean) => Promise<void>;
     refreshAll: (days?: number) => Promise<void>;
     createPortfolio: (name: string, description?: string) => Promise<void>;
 
@@ -106,9 +106,9 @@ export const usePortfolioStore = create<PortfolioState>((set, get) => ({
         }
     },
 
-    fetchHistory: async (portfolioId, days = 30) => {
+    fetchHistory: async (portfolioId, days = 30, forceRefresh = false) => {
         try {
-            const result = await apiClient.getPortfolioHistory(portfolioId, days);
+            const result = await apiClient.getPortfolioHistory(portfolioId, days, forceRefresh);
             set({ history: result.data });
         } catch (error) {
             set({ error: (error as Error).message });
