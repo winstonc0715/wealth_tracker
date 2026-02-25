@@ -250,3 +250,11 @@ const actionBtnStyle = (type: 'buy' | 'sell') => ({
     fontSize: '0.7rem',
     fontWeight: 600,
 });
+
+export const CATEGORY_IDS: Record<string, number> = {
+    tw_stock: 1,
+    us_stock: 2,
+    crypto: 3,
+    fiat: 4,
+    liability: 5,
+};
