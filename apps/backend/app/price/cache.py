@@ -9,7 +9,7 @@ import logging
 from decimal import Decimal
 
 from app.price.base import PriceData
-from app.redis_client import cache_get, cache_set
+from app.redis_client import cache_get, cache_set, cache_get_stale
 
 logger = logging.getLogger(__name__)
 
@@ -68,3 +68,15 @@ async def set_cached_price(
     key = _make_key(provider, symbol)
     await cache_set(key, _price_to_dict(price), ttl=ttl)
     logger.debug("快取寫入: %s (TTL=%s)", key, ttl)
+
+
+async def get_stale_cached_price(
+    provider: str, symbol: str
+) -> PriceData | None:
+    """從快取取得報價（即使已過期），用於 API 失敗時的 fallback"""
+    key = _make_key(provider, symbol)
+    data = await cache_get_stale(key)
+    if data:
+        logger.debug("stale 快取命中: %s", key)
+        return _dict_to_price(data)
+    return None

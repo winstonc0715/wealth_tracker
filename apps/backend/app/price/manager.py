@@ -11,7 +11,7 @@ from decimal import Decimal
 
 from app.config import get_settings
 from app.price.base import PriceData, HistoricalPrice, PriceNotFoundError, SearchResult
-from app.price.cache import get_cached_price, set_cached_price
+from app.price.cache import get_cached_price, set_cached_price, get_stale_cached_price
 from app.price.crypto import CryptoProvider
 from app.price.us_stock import USStockProvider
 from app.price.tw_stock import TWStockProvider
@@ -109,6 +109,16 @@ class PriceManager:
             future.set_result(price)
             return price
         except Exception as e:
+            # 4. API 失敗時，嘗試回退到過期快取（stale cache）
+            stale = await get_stale_cached_price(provider_name, symbol)
+            if stale:
+                logger.warning(
+                    "API 失敗但有過期快取可用: %s (%s), 使用上次報價 %s",
+                    symbol, category_slug, stale.price
+                )
+                future.set_result(stale)
+                return stale
+            logger.error("API 失敗且無快取可用: %s (%s): %s", symbol, category_slug, e)
             future.set_exception(e)
             raise e
         finally:

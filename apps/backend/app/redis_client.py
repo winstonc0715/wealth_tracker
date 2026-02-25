@@ -72,6 +72,31 @@ async def cache_get(key: str) -> Any | None:
     return None
 
 
+async def cache_get_stale(key: str) -> Any | None:
+    """
+    從快取讀取資料（即使已過期也回傳）
+
+    當 API 失敗時，回傳上次成功的報價比回傳 $0 更合理。
+    """
+    import time
+
+    redis = await get_redis()
+    if redis:
+        try:
+            value = await redis.get(key)
+            if value:
+                return json.loads(value)
+        except Exception:
+            pass
+
+    # 記憶體快取（不檢查過期）
+    if key in _memory_cache:
+        value, _expire_at = _memory_cache[key]
+        return value
+
+    return None
+
+
 async def cache_set(key: str, value: Any, ttl: int | None = None) -> None:
     """寫入快取，優先 Redis，備用記憶體快取"""
     import time
