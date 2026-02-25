@@ -7,11 +7,12 @@
 import logging
 from decimal import Decimal, ROUND_HALF_UP
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.transaction import Transaction, TransactionType
 from app.models.position import CurrentPosition
+from app.models.net_worth import HistoricalNetWorth
 from app.schemas.transaction import TransactionCreate
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,10 @@ class TransactionService:
         await self._update_position(tx)
 
         await self.db.flush()
+
+        # 清除受影響日期之後的快照，確保走勢圖重算
+        await self._invalidate_snapshots(data.portfolio_id, tx.executed_at.date())
+
         return tx
 
     async def update_transaction(
@@ -81,6 +86,9 @@ class TransactionService:
         if tx.symbol != old_symbol:
             await self.recalculate_position(tx.portfolio_id, tx.symbol)
 
+        # 清除受影響日期之後的快照，確保走勢圖重算
+        await self._invalidate_snapshots(tx.portfolio_id, tx.executed_at.date())
+
         return tx
 
     async def delete_transaction(self, tx_id: str) -> None:
@@ -91,12 +99,16 @@ class TransactionService:
 
         portfolio_id = tx.portfolio_id
         symbol = tx.symbol
+        executed_date = tx.executed_at.date()
 
         await self.db.delete(tx)
         await self.db.flush()
 
         # 重新計算該標的之損益
         await self.recalculate_position(portfolio_id, symbol)
+
+        # 清除受影響日期之後的快照，確保走勢圖重算
+        await self._invalidate_snapshots(portfolio_id, executed_date)
 
     async def recalculate_position(self, portfolio_id: str, symbol: str) -> None:
         """
@@ -200,6 +212,22 @@ class TransactionService:
                 recalculated_count += 1
                 
         return {"portfolios": len(portfolios), "symbols": recalculated_count}
+
+    async def _invalidate_snapshots(self, portfolio_id: str, from_date) -> None:
+        """清除從 from_date 開始的所有快照，強制下次請求時重算"""
+        from datetime import date as date_type
+        if not isinstance(from_date, date_type):
+            from_date = from_date.date() if hasattr(from_date, 'date') else from_date
+
+        stmt = delete(HistoricalNetWorth).where(
+            HistoricalNetWorth.portfolio_id == portfolio_id,
+            HistoricalNetWorth.snapshot_date >= from_date,
+        )
+        result = await self.db.execute(stmt)
+        logger.info(
+            "已清除 %s 自 %s 起的 %d 筆快照",
+            portfolio_id, from_date, result.rowcount
+        )
 
     async def _update_position(self, tx: Transaction) -> None:
         """根據交易類型更新持倉並計算已實現損益"""

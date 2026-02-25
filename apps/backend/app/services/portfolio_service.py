@@ -458,6 +458,27 @@ class PortfolioService:
                 value=final_val
             ))
 
+            # 將回溯計算出的結果持久化（不含今天，今天由即時排程處理）
+            if current_date not in record_map and current_date < today:
+                try:
+                    snapshot = HistoricalNetWorth(
+                        portfolio_id=portfolio_id,
+                        snapshot_date=current_date,
+                        total_assets=daily_net_worth if daily_net_worth > 0 else Decimal("0"),
+                        total_liabilities=Decimal("0"),
+                        net_worth=daily_net_worth,
+                    )
+                    self.db.add(snapshot)
+                except Exception as e:
+                    logger.warning("持久化回溯快照失敗 (%s): %s", current_date, e)
+
+        # 批次提交回溯產生的快照
+        try:
+            await self.db.flush()
+            logger.info("回溯引擎已持久化歷史快照 (Portfolio: %s)", portfolio_id)
+        except Exception as e:
+            logger.warning("批次持久化快照失敗: %s", e)
+
         return PortfolioHistoryResponse(
             portfolio_id=portfolio_id,
             history=history
