@@ -26,9 +26,9 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
     const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
     const [expandedId, setExpandedId] = useState<string | null>(null);
 
-    // 計算總資產用於占比條
+    // 計算總資產用於占比條 (修復：使用換算後的基準幣別價值)
     const totalAssets = useMemo(() =>
-        positions.reduce((sum, pos) => sum + Math.max(0, Number(pos.total_value)), 0),
+        positions.reduce((sum, pos) => sum + Math.max(0, Number(pos.total_value_base || pos.total_value)), 0),
         [positions]);
 
     useEffect(() => {
@@ -101,10 +101,11 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
                 <table className="data-table" style={{ borderSpacing: 0 }}>
                     <thead>
                         <tr>
-                            <th onClick={() => handleSort('symbol')} style={{ cursor: 'pointer', width: '30%' }}>標的</th>
+                            <th onClick={() => handleSort('symbol')} style={{ cursor: 'pointer', width: '25%' }}>標的</th>
                             <th onClick={() => handleSort('current_price')} style={{ textAlign: 'right', cursor: 'pointer' }}>價格 / 成本</th>
                             <th onClick={() => handleSort('total_value')} style={{ textAlign: 'right', cursor: 'pointer' }}>市值 / 數量</th>
                             <th onClick={() => handleSort('unrealized_pnl')} style={{ textAlign: 'right', cursor: 'pointer' }}>損益 / 報酬</th>
+                            <th style={{ textAlign: 'right', width: '90px' }}>24h 漲跌</th>
                             <th style={{ textAlign: 'center', width: '80px' }}>操作</th>
                         </tr>
                     </thead>
@@ -112,10 +113,11 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
                         {sortedPositions.map((pos) => {
                             const pnl = Number(pos.unrealized_pnl);
                             const pnlPct = Number(pos.unrealized_pnl_pct);
+                            const change24h = pos.price_change_24h_pct;
                             const isProfit = pnl >= 0;
                             const flash = flashMap[pos.symbol];
                             const isExpanded = expandedId === pos.symbol;
-                            const weight = totalAssets > 0 ? (Number(pos.total_value) / totalAssets) * 100 : 0;
+                            const weight = totalAssets > 0 ? (Number(pos.total_value_base || pos.total_value) / totalAssets) * 100 : 0;
 
                             // 熱度背景色 (更淡的視覺)
                             let heatStyle = {};
@@ -190,7 +192,19 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
                                             </div>
                                         </td>
 
-                                        {/* 欄位 E: 操作 */}
+                                        {/* 欄位 E: 24h 漲跌 (New!) */}
+                                        <td style={{ textAlign: 'right' }}>
+                                            {change24h !== undefined && change24h !== null ? (
+                                                <div className={`number ${change24h >= 0 ? 'pnl-positive' : 'pnl-negative'}`} style={{ fontWeight: 600, fontSize: '0.9rem' }}>
+                                                    {change24h > 0 ? '▲' : change24h < 0 ? '▼' : ''}
+                                                    {Math.abs(change24h).toFixed(2)}%
+                                                </div>
+                                            ) : (
+                                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>--</span>
+                                            )}
+                                        </td>
+
+                                        {/* 欄位 F: 操作 */}
                                         <td onClick={(e) => e.stopPropagation()}>
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                                 <button onClick={() => onQuickTrade?.(pos, 'buy')} style={actionBtnStyle('buy')}>加碼</button>
@@ -202,7 +216,7 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
                                     {/* 詳情展開面板 */}
                                     {isExpanded && (
                                         <tr>
-                                            <td colSpan={5} style={{ padding: '0', background: 'var(--color-bg-secondary)' }}>
+                                            <td colSpan={6} style={{ padding: '0', background: 'var(--color-bg-secondary)' }}>
                                                 <div style={{ padding: '20px 24px', animation: 'fadeIn 0.3s ease' }}>
                                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
                                                         <div>

@@ -251,6 +251,8 @@ export interface PositionDetail {
     unrealized_pnl: number;
     unrealized_pnl_pct: number;
     currency: string;
+    price_change_24h_pct?: number;
+    total_value_base?: number;
 }
 
 export interface PortfolioSummary {
