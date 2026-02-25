@@ -21,6 +21,7 @@ export default function TransactionsPage() {
     const [editQuantity, setEditQuantity] = useState<number>(0);
     const [editPrice, setEditPrice] = useState<number>(0);
     const [editFee, setEditFee] = useState<number>(0);
+    const [editExecutedAt, setEditExecutedAt] = useState('');
     const [isUpdating, setIsUpdating] = useState(false);
     const [isRecalculating, setIsRecalculating] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
@@ -68,7 +69,8 @@ export default function TransactionsPage() {
                 note: editNote,
                 quantity: editQuantity,
                 unit_price: editPrice,
-                fee: editFee
+                fee: editFee,
+                executed_at: editExecutedAt
             });
             setEditingTx(null);
             await fetchTransactions();
@@ -190,6 +192,10 @@ export default function TransactionsPage() {
                                                     setEditQuantity(Number(tx.quantity));
                                                     setEditPrice(Number(tx.unit_price));
                                                     setEditFee(Number(tx.fee));
+                                                    // 將 ISO 時間轉換為 datetime-local 格式
+                                                    const dt = new Date(tx.executed_at);
+                                                    const localStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}T${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+                                                    setEditExecutedAt(localStr);
                                                 }}
                                             >
                                                 編輯
@@ -235,6 +241,16 @@ export default function TransactionsPage() {
                         <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '20px' }}>
                             標的: {editingTx.symbol} ({editingTx.asset_name})
                         </p>
+
+                        <div style={{ marginBottom: '16px' }}>
+                            <label style={labelStyle}>交易時間</label>
+                            <input
+                                type="datetime-local"
+                                className="input-field"
+                                value={editExecutedAt}
+                                onChange={e => setEditExecutedAt(e.target.value)}
+                            />
+                        </div>
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                             <div>
