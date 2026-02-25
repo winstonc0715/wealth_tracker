@@ -237,3 +237,35 @@ async def get_portfolio_history(
     except Exception as e:
         logger.error("取得歷史淨值失敗: %s", e)
         raise HTTPException(status_code=500, detail=f"取得歷史淨值失敗: {e}")
+
+
+@router.post("/{portfolio_id}/snapshot", response_model=ApiResponse[dict])
+async def trigger_snapshot(
+    portfolio_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    手動觸發淨值快照儲存
+
+    即時計算當前淨值並寫入 HistoricalNetWorth 表，
+    無需等待背景排程。
+    """
+    portfolio = await db.get(Portfolio, portfolio_id)
+    if not portfolio or portfolio.user_id != user.id:
+        raise HTTPException(status_code=404, detail="投資組合不存在")
+
+    service = _get_portfolio_service(db)
+    try:
+        snapshot = await service.save_net_worth_snapshot(portfolio_id)
+        await db.commit()
+        return ApiResponse(data={
+            "snapshot_date": str(snapshot.snapshot_date),
+            "net_worth": float(snapshot.net_worth),
+            "total_assets": float(snapshot.total_assets),
+            "total_liabilities": float(snapshot.total_liabilities),
+        }, message="快照已儲存")
+    except Exception as e:
+        logger.error("手動快照失敗: %s", e)
+        raise HTTPException(status_code=500, detail=f"快照儲存失敗: {e}")
+
