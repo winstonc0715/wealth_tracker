@@ -145,6 +145,7 @@ class PortfolioService:
                 price_change_24h_pct=price_data.change_pct_24h if price_data else None,
                 total_value_base=total_value_twd,
                 unrealized_pnl_base=unrealized_pnl_twd,
+                current_price_base=current_price * twd_multiplier,
             ))
 
         net_worth = total_assets - total_liabilities

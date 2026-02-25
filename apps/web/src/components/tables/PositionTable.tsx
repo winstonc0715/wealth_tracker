@@ -79,6 +79,7 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
             const getSortValue = (pos: PositionDetail, col: SortColumn) => {
                 if (col === 'total_value') return Number(pos.total_value_base || pos.total_value);
                 if (col === 'unrealized_pnl') return Number(pos.unrealized_pnl_base || pos.unrealized_pnl);
+                if (col === 'current_price') return Number(pos.current_price_base || pos.current_price);
                 return col === 'symbol' ? pos.symbol : Number(pos[col] || 0);
             };
 
