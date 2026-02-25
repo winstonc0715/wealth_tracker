@@ -253,6 +253,7 @@ export interface PositionDetail {
     currency: string;
     price_change_24h_pct?: number;
     total_value_base?: number;
+    unrealized_pnl_base?: number;
 }
 
 export interface PortfolioSummary {

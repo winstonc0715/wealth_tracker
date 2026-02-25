@@ -49,6 +49,7 @@ class PositionDetail(BaseModel):
     currency: str
     price_change_24h_pct: Decimal | None = None
     total_value_base: Decimal | None = None
+    unrealized_pnl_base: Decimal | None = None
 
 
 class PortfolioSummary(BaseModel):

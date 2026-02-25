@@ -144,6 +144,7 @@ class PortfolioService:
                 currency=pos.currency if pos.currency else ("USD" if category_slug in ("us_stock", "crypto") else "TWD"),
                 price_change_24h_pct=price_data.change_pct_24h if price_data else None,
                 total_value_base=total_value_twd,
+                unrealized_pnl_base=unrealized_pnl_twd,
             ))
 
         net_worth = total_assets - total_liabilities

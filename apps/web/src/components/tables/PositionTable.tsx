@@ -8,7 +8,7 @@ interface PositionTableProps {
     onQuickTrade?: (position: PositionDetail, action: 'buy' | 'sell') => void;
 }
 
-type SortColumn = 'symbol' | 'current_price' | 'total_quantity' | 'avg_cost' | 'total_value' | 'unrealized_pnl' | 'unrealized_pnl_pct';
+type SortColumn = 'symbol' | 'current_price' | 'total_quantity' | 'avg_cost' | 'total_value' | 'unrealized_pnl' | 'unrealized_pnl_pct' | 'price_change_24h_pct';
 type SortDirection = 'asc' | 'desc';
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -65,17 +65,26 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
         }
     };
 
+    const renderSortIcon = (column: SortColumn) => {
+        if (sortColumn !== column) return null;
+        return <span style={{ marginLeft: '4px', fontSize: '0.7rem' }}>{sortDirection === 'asc' ? '▲' : '▼'}</span>;
+    };
+
     const sortedPositions = useMemo(() => {
         return [...positions].sort((a, b) => {
             let valA: number | string = 0;
             let valB: number | string = 0;
-            if (sortColumn === 'symbol') {
-                valA = a.symbol;
-                valB = b.symbol;
-            } else {
-                valA = Number(a[sortColumn] || 0);
-                valB = Number(b[sortColumn] || 0);
-            }
+
+            // 針對需要跨幣別基準值的排序進行映射
+            const getSortValue = (pos: PositionDetail, col: SortColumn) => {
+                if (col === 'total_value') return Number(pos.total_value_base || pos.total_value);
+                if (col === 'unrealized_pnl') return Number(pos.unrealized_pnl_base || pos.unrealized_pnl);
+                return col === 'symbol' ? pos.symbol : Number(pos[col] || 0);
+            };
+
+            valA = getSortValue(a, sortColumn);
+            valB = getSortValue(b, sortColumn);
+
             if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
             if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
             return 0;
@@ -101,11 +110,12 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
                 <table className="data-table" style={{ borderSpacing: 0 }}>
                     <thead>
                         <tr>
-                            <th onClick={() => handleSort('symbol')} style={{ cursor: 'pointer', width: '25%' }}>標的</th>
-                            <th onClick={() => handleSort('current_price')} style={{ textAlign: 'right', cursor: 'pointer' }}>價格 / 成本</th>
-                            <th onClick={() => handleSort('total_value')} style={{ textAlign: 'right', cursor: 'pointer' }}>市值 / 數量</th>
-                            <th onClick={() => handleSort('unrealized_pnl')} style={{ textAlign: 'right', cursor: 'pointer' }}>損益 / 報酬</th>
-                            <th style={{ textAlign: 'right', width: '90px' }}>24h 漲跌</th>
+                            <th onClick={() => handleSort('symbol')} style={{ cursor: 'pointer', width: '22%' }}>標的 {renderSortIcon('symbol')}</th>
+                            <th onClick={() => handleSort('current_price')} style={{ textAlign: 'right', cursor: 'pointer' }}>價格 / 成本 {renderSortIcon('current_price')}</th>
+                            <th onClick={() => handleSort('total_value')} style={{ textAlign: 'right', cursor: 'pointer' }}>市值 / 數量 {renderSortIcon('total_value')}</th>
+                            <th onClick={() => handleSort('unrealized_pnl')} style={{ textAlign: 'right', cursor: 'pointer' }}>損益 {renderSortIcon('unrealized_pnl')}</th>
+                            <th onClick={() => handleSort('unrealized_pnl_pct')} style={{ textAlign: 'right', cursor: 'pointer' }}>報酬 {renderSortIcon('unrealized_pnl_pct')}</th>
+                            <th onClick={() => handleSort('price_change_24h_pct')} style={{ textAlign: 'right', width: '90px', cursor: 'pointer' }}>24h 漲跌 {renderSortIcon('price_change_24h_pct')}</th>
                             <th style={{ textAlign: 'center', width: '80px' }}>操作</th>
                         </tr>
                     </thead>
@@ -180,19 +190,21 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
                                             </div>
                                         </td>
 
-                                        {/* 欄位 D: 績效表現 */}
+                                        {/* 欄位 D: 損益 */}
                                         <td style={{ textAlign: 'right' }}>
                                             <div className={`number ${isProfit ? 'pnl-positive' : 'pnl-negative'}`} style={{ fontWeight: 600 }}>
                                                 {isProfit ? '+' : ''}{formatCurrency(pnl, pos.category_slug)}
                                             </div>
-                                            <div style={{ marginTop: '2px' }}>
-                                                <span className={isProfit ? 'pnl-badge-positive' : 'pnl-badge-negative'} style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
-                                                    {isProfit ? '+' : ''}{pnlPct.toFixed(2)}%
-                                                </span>
-                                            </div>
                                         </td>
 
-                                        {/* 欄位 E: 24h 漲跌 (New!) */}
+                                        {/* 欄位 E: 報酬 */}
+                                        <td style={{ textAlign: 'right' }}>
+                                            <span className={isProfit ? 'pnl-badge-positive' : 'pnl-badge-negative'} style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
+                                                {isProfit ? '+' : ''}{pnlPct.toFixed(2)}%
+                                            </span>
+                                        </td>
+
+                                        {/* 欄位 F: 24h 漲跌 */}
                                         <td style={{ textAlign: 'right' }}>
                                             {change24h !== undefined && change24h !== null ? (
                                                 <div className={`number ${change24h >= 0 ? 'pnl-positive' : 'pnl-negative'}`} style={{ fontWeight: 600, fontSize: '0.9rem' }}>
@@ -204,7 +216,7 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
                                             )}
                                         </td>
 
-                                        {/* 欄位 F: 操作 */}
+                                        {/* 欄位 G: 操作 */}
                                         <td onClick={(e) => e.stopPropagation()}>
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                                 <button onClick={() => onQuickTrade?.(pos, 'buy')} style={actionBtnStyle('buy')}>加碼</button>
@@ -216,7 +228,7 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
                                     {/* 詳情展開面板 */}
                                     {isExpanded && (
                                         <tr>
-                                            <td colSpan={6} style={{ padding: '0', background: 'var(--color-bg-secondary)' }}>
+                                            <td colSpan={7} style={{ padding: '0', background: 'var(--color-bg-secondary)' }}>
                                                 <div style={{ padding: '20px 24px', animation: 'fadeIn 0.3s ease' }}>
                                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
                                                         <div>
