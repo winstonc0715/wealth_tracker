@@ -178,12 +178,13 @@ class PriceManager:
             except Exception as e:
                 logger.warning("取得 %s 報價失敗: %s", symbol, e)
                 
-                # 若報價失敗，試圖從快取撈舊資料當 Fallback
+                # 若報價失敗，試圖從 stale 快取撈舊資料當 Fallback
                 provider_name = CATEGORY_PROVIDER_MAP.get(category_slug, "")
                 if provider_name:
-                    cached = await get_cached_price(provider_name, symbol)
-                    if cached:
-                        results[symbol] = cached
+                    stale = await get_stale_cached_price(provider_name, symbol)
+                    if stale:
+                        results[symbol] = stale
+                        logger.info("batch fallback 使用 stale 快取: %s = %s", symbol, stale.price)
                         continue
 
                 # 真沒快取才回傳 0
