@@ -111,12 +111,16 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
                 <table className="data-table" style={{ borderSpacing: 0 }}>
                     <thead>
                         <tr>
-                            <th onClick={() => handleSort('symbol')} style={{ cursor: 'pointer', width: '22%' }}>標的 {renderSortIcon('symbol')}</th>
-                            <th onClick={() => handleSort('current_price')} style={{ textAlign: 'right', cursor: 'pointer' }}>價格 / 成本 {renderSortIcon('current_price')}</th>
-                            <th onClick={() => handleSort('total_value')} style={{ textAlign: 'right', cursor: 'pointer' }}>市值 / 數量 {renderSortIcon('total_value')}</th>
-                            <th onClick={() => handleSort('unrealized_pnl')} style={{ textAlign: 'right', cursor: 'pointer' }}>損益 {renderSortIcon('unrealized_pnl')}</th>
-                            <th onClick={() => handleSort('unrealized_pnl_pct')} style={{ textAlign: 'right', cursor: 'pointer' }}>報酬 {renderSortIcon('unrealized_pnl_pct')}</th>
-                            <th onClick={() => handleSort('price_change_24h_pct')} style={{ textAlign: 'right', width: '90px', cursor: 'pointer' }}>24h 漲跌 {renderSortIcon('price_change_24h_pct')}</th>
+                            <th onClick={() => handleSort('symbol')} style={{ cursor: 'pointer', width: '20%', whiteSpace: 'nowrap' }}>標的 {renderSortIcon('symbol')}</th>
+                            <th onClick={() => handleSort('current_price')} style={{ textAlign: 'right', cursor: 'pointer', whiteSpace: 'nowrap' }}>價格 / 成本 {renderSortIcon('current_price')}</th>
+                            <th onClick={() => handleSort('total_value')} style={{ textAlign: 'right', cursor: 'pointer', whiteSpace: 'nowrap' }}>市值 / 數量 {renderSortIcon('total_value')}</th>
+                            <th onClick={() => handleSort('unrealized_pnl')} style={{ textAlign: 'right', cursor: 'pointer', whiteSpace: 'nowrap' }}>損益 {renderSortIcon('unrealized_pnl')}</th>
+                            <th onClick={() => handleSort('unrealized_pnl_pct')} style={{ textAlign: 'right', cursor: 'pointer', whiteSpace: 'nowrap' }}>報酬 {renderSortIcon('unrealized_pnl_pct')}</th>
+                            <th onClick={() => handleSort('price_change_24h_pct')} style={{ textAlign: 'right', width: '110px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                                <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                                    24H 漲跌 {renderSortIcon('price_change_24h_pct')}
+                                </div>
+                            </th>
                             <th style={{ textAlign: 'center', width: '80px' }}>操作</th>
                         </tr>
                     </thead>
