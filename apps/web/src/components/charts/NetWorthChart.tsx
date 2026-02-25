@@ -152,6 +152,7 @@ export default function NetWorthChart({ data }: NetWorthChartProps) {
                             tickLine={false}
                             axisLine={false}
                             tickFormatter={formatCurrency}
+                            domain={['auto', 'auto']}
                         />
                         <Tooltip
                             contentStyle={{
