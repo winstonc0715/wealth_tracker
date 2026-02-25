@@ -364,8 +364,10 @@ class PortfolioService:
         for (sym, _), p_result in zip(symbols_to_fetch, prices_results):
             if isinstance(p_result, Exception) or not p_result:
                 history_prices[sym] = {}
+                logger.warning("歷史報價取得失敗或為空: %s (結果: %s)", sym, type(p_result).__name__ if isinstance(p_result, Exception) else "empty")
                 continue
             history_prices[sym] = {p.date.date(): p.close for p in p_result}
+            logger.info("歷史報價取得成功: %s (%d 筆)", sym, len(p_result))
 
         # B-2. 由於歷史報價可能不含「今天即時正在跳動的價格」，也為它們補上 fallback
         current_prices = {}

@@ -77,8 +77,9 @@ async def record_all_portfolios_snapshot():
                 logger.info("沒有任何投資組合需要記錄。")
                 return
             
-            # 使用 PortfolioService 進行儲存
-            service = PortfolioService(session)
+            # 使用 PortfolioService 進行儲存（需傳入 PriceManager 以計算即時淨值）
+            manager = PriceManager()
+            service = PortfolioService(session, manager)
             for pf in portfolios:
                 try:
                     await service.save_net_worth_snapshot(pf.id)
@@ -86,6 +87,7 @@ async def record_all_portfolios_snapshot():
                     logger.error("記錄投資組合 %s 淨值失敗: %s", pf.id, ex)
             
             await session.commit()
+            await manager.close()
             logger.info("背景記錄全站淨值快照完成 (共 %d 個投資組合)", len(portfolios))
             
     except Exception as e:
