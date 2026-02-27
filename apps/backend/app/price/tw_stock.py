@@ -212,26 +212,31 @@ class TWStockProvider(PriceProvider):
             # 判斷是上市 (.TW) 還是上櫃 (.TWO)
             yf_symbol = f"{stock_id}.TW"
             ticker = yf.Ticker(yf_symbol)
-            # 先試 .TW，如果沒數據再試 .TWO
-            hist = ticker.history(period="1y")
+            # 取得 2 年資料以確保能算出一年前的漲跌
+            hist = ticker.history(period="2y")
             
             if hist.empty:
                 yf_symbol = f"{stock_id}.TWO"
                 ticker = yf.Ticker(yf_symbol)
-                hist = ticker.history(period="1y")
+                hist = ticker.history(period="2y")
 
             if not hist.empty:
-                # 計算 52W 高低
-                week_52_high = float(hist['High'].max())
-                week_52_low = float(hist['Low'].min())
+                # 只取最近一年內的數據來算 52W 高低 (以免 2y 資料干擾 52W)
+                recent_1y = hist.iloc[-252:] if len(hist) > 252 else hist
+                week_52_high = float(recent_1y['High'].max())
+                week_52_low = float(recent_1y['Low'].min())
                 
                 # 計算各時段漲跌
                 current = float(hist['Close'].iloc[-1])
-                # yf 返回的是交易日數據，用估算的天數 (1週~5天, 1月~22天)
+                # yf 返回的是交易日數據，用估算的天數 (1週~5天, 1月~22天, 1年~252天)
                 intervals = [("7d", 5), ("14d", 10), ("30d", 22), ("60d", 44), ("1y", 252)]
                 for label, days in intervals:
-                    if len(hist) > days:
+                    if len(hist) >= days + 1:
                         past = float(hist['Close'].iloc[-days-1])
+                        changes[label] = round(((current - past) / past) * 100, 2)
+                    elif label == "1y" and len(hist) > 0:
+                        # 如果資料不夠 252 天但有資料，就以最舊的一筆當作 1y 參考
+                        past = float(hist['Close'].iloc[0])
                         changes[label] = round(((current - past) / past) * 100, 2)
                 
                 logger.info(f"台股 {stock_id} 透過 yfinance 取得數據成功")
