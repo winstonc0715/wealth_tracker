@@ -1,5 +1,5 @@
 # === Build stage ===
-# Force rebuild - Cache-buster: 2026-02-22-v3
+# Force rebuild - Cache-buster: 2026-02-27-market-detail-v2
 FROM python:3.11-slim as builder
 
 WORKDIR /app
