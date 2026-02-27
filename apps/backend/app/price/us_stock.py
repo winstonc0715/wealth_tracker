@@ -94,15 +94,20 @@ class USStockProvider(PriceProvider):
         # 用歷史數據計算多時段漲跌
         changes: dict[str, float | None] = {}
         try:
-            hist = ticker.history(period="1y")
+            # 取得 2 年資料以確保能算出一年前的漲跌
+            hist = ticker.history(period="2y")
             if not hist.empty:
-                current = hist['Close'].iloc[-1]
-                for label, days in [("7d", 5), ("14d", 10), ("30d", 22), ("60d", 44), ("1y", 252)]:
-                    if len(hist) > days:
-                        past = hist['Close'].iloc[-days - 1]
+                current = float(hist['Close'].iloc[-1])
+                # yf 返回的是交易日數據，用估算的天數 (1週~5天, 1月~22天, 1年~252天)
+                intervals = [("7d", 5), ("14d", 10), ("30d", 22), ("60d", 44), ("1y", 252)]
+                for label, days in intervals:
+                    if len(hist) >= days + 1:
+                        past = float(hist['Close'].iloc[-days - 1])
                         changes[label] = round(((current - past) / past) * 100, 2)
-                    else:
-                        changes[label] = None
+                    elif label == "1y" and len(hist) > 0:
+                        # 如果資料不夠 252 天但有資料，就以最舊的一筆當作 1y 參考
+                        past = float(hist['Close'].iloc[0])
+                        changes[label] = round(((current - past) / past) * 100, 2)
         except Exception:
             pass
 
