@@ -198,44 +198,69 @@ class TWStockProvider(PriceProvider):
         return await loop.run_in_executor(None, self._fetch_market_detail, symbol)
 
     def _fetch_market_detail(self, symbol: str) -> "MarketDetail":
-        """同步取得台股市場詳情"""
+        """同步取得台股市場詳情 (twstock + yfinance 備援)"""
         from app.price.base import MarketDetail
+        import yfinance as yf
 
         stock_id = symbol.replace(".TW", "").replace(".TWO", "")
         changes: dict[str, float | None] = {}
         week_52_high = None
         week_52_low = None
 
+        # 1. 嘗試透過 yfinance 取得穩定數據 (備援優先，因為爬蟲在雲端太常失敗)
         try:
-            import twstock
-            stock = twstock.Stock(stock_id)
-            # 取近 13 個月資料（含 52 週）
-            from datetime import date
-            today = date.today()
-            year_ago = today.year - 1
-            month_ago = today.month
-            data = stock.fetch_from(year_ago, month_ago)
+            # 判斷是上市 (.TW) 還是上櫃 (.TWO)
+            yf_symbol = f"{stock_id}.TW"
+            ticker = yf.Ticker(yf_symbol)
+            # 先試 .TW，如果沒數據再試 .TWO
+            hist = ticker.history(period="1y")
+            
+            if hist.empty:
+                yf_symbol = f"{stock_id}.TWO"
+                ticker = yf.Ticker(yf_symbol)
+                hist = ticker.history(period="1y")
 
-            if data:
-                closes = [d.close for d in data if d.close]
-                highs = [d.high for d in data if d.high]
-                lows = [d.low for d in data if d.low]
-
-                if closes:
-                    current = closes[-1]
-                    for label, days in [("7d", 5), ("14d", 10), ("30d", 22), ("60d", 44), ("1y", 252)]:
-                        if len(closes) > days:
-                            past = closes[-days - 1]
-                            changes[label] = round(((current - past) / past) * 100, 2)
-
-                if highs:
-                    week_52_high = max(highs)
-                if lows:
-                    week_52_low = min(lows)
+            if not hist.empty:
+                # 計算 52W 高低
+                week_52_high = float(hist['High'].max())
+                week_52_low = float(hist['Low'].min())
+                
+                # 計算各時段漲跌
+                current = float(hist['Close'].iloc[-1])
+                # yf 返回的是交易日數據，用估算的天數 (1週~5天, 1月~22天)
+                intervals = [("7d", 5), ("14d", 10), ("30d", 22), ("60d", 44), ("1y", 252)]
+                for label, days in intervals:
+                    if len(hist) > days:
+                        past = float(hist['Close'].iloc[-days-1])
+                        changes[label] = round(((current - past) / past) * 100, 2)
+                
+                logger.info(f"台股 {stock_id} 透過 yfinance 取得數據成功")
         except Exception as e:
-            logger.warning(f"台股 {stock_id} 市場詳情取得失敗: {e}")
+            logger.warning(f"台股 {stock_id} yfinance 備援失敗: {e}")
 
-        # 24h 漲跌從現有報價取得
+        # 2. 如果 yfinance 沒抓到，嘗試 twstock (爬蟲)
+        if not changes and not week_52_high:
+            try:
+                import twstock
+                stock = twstock.Stock(stock_id)
+                data = stock.fetch_from(datetime.now().year - 1, datetime.now().month)
+                if data:
+                    closes = [d.close for d in data if d.close]
+                    highs = [d.high for d in data if d.high]
+                    lows = [d.low for d in data if d.low]
+
+                    if closes:
+                        current = float(closes[-1])
+                        for label, days in [("7d", 5), ("14d", 10), ("30d", 22), ("60d", 44), ("1y", 252)]:
+                            if len(closes) > days:
+                                past = float(closes[-days - 1])
+                                changes[label] = round(((current - past) / past) * 100, 2)
+                    if highs: week_52_high = float(max(highs))
+                    if lows: week_52_low = float(min(lows))
+            except Exception as e:
+                logger.warning(f"台股 {stock_id} twstock 取得失敗: {e}")
+
+        # 3. 24h 漲跌從現有即時報價取得
         pct_24h = None
         try:
             price_data = self._fetch_price(symbol)
