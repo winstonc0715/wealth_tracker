@@ -284,22 +284,34 @@ class TWStockProvider(PriceProvider):
             # 嘗試從 yfinance info 拿市值與 PE
             yf_symbol = f"{stock_id}.TW"
             ticker = yf.Ticker(yf_symbol)
-            info = ticker.info
-            if not info or not info.get("marketCap"):
-                yf_symbol = f"{stock_id}.TWO"
-                ticker = yf.Ticker(yf_symbol)
+            
+            # 使用 fast_info 作為市值的主要來源，因為它更快更穩
+            try:
+                market_cap = ticker.fast_info.market_cap
+                if not market_cap or market_cap <= 0:
+                    ticker = yf.Ticker(f"{stock_id}.TWO")
+                    market_cap = ticker.fast_info.market_cap
+            except Exception as e:
+                logger.warning(f"台股 {stock_id} fast_info 取得失敗: {e}")
+
+            # PE 仍需從 info 取得
+            try:
                 info = ticker.info
-                
-            if info:
-                market_cap = info.get("marketCap")
-                pe_ratio = info.get("trailingPE") or info.get("forwardPE")
+                if info:
+                    if not market_cap: # 如果 fast_info 沒抓到，補抓 info 的
+                        market_cap = info.get("marketCap")
+                    pe_ratio = info.get("trailingPE") or info.get("forwardPE")
+            except Exception as e:
+                logger.warning(f"台股 {stock_id} info 取得失敗: {e}")
+
+            logger.info(f"台股 {stock_id} 診斷數據: Cap={market_cap}, PE={pe_ratio}")
 
             # 24h 漲跌從現有即時報價取得
             price_data = self._fetch_price(symbol)
             if price_data.change_pct_24h is not None:
                 pct_24h = float(price_data.change_pct_24h)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"台股 {stock_id} 輔助數據處理異常: {e}")
 
         return MarketDetail(
             symbol=stock_id,
