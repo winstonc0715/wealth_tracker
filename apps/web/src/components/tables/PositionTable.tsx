@@ -162,15 +162,22 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
                                                     </div>
                                                 </div>
                                             </div>
-                                            {/* 占比視覺條 */}
+                                            {/* 占比視覺條 + 百分比數字 */}
                                             <div style={{
-                                                marginTop: '6px', width: '60px', height: '3px',
-                                                background: 'var(--color-bg-secondary)', borderRadius: '2px', overflow: 'hidden'
+                                                marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px'
                                             }}>
                                                 <div style={{
-                                                    width: `${Math.min(100, Math.max(0, weight))}%`, height: '100%',
-                                                    background: 'var(--color-primary)', opacity: 0.7
-                                                }} />
+                                                    width: '50px', height: '5px',
+                                                    background: 'rgba(255,255,255,0.08)', borderRadius: '3px', overflow: 'hidden'
+                                                }}>
+                                                    <div style={{
+                                                        width: `${Math.min(100, Math.max(0, weight))}%`, height: '100%',
+                                                        background: 'var(--color-primary)', borderRadius: '3px'
+                                                    }} />
+                                                </div>
+                                                <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+                                                    {weight.toFixed(1)}%
+                                                </span>
                                             </div>
                                         </td>
 
