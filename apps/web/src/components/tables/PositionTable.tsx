@@ -288,23 +288,23 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
                                                         ) : (
                                                             <>
                                                                 {/* 多時段漲跌 */}
-                                                                <div style={{ marginBottom: '16px' }}>
-                                                                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '10px', fontWeight: 600 }}>📈 區間漲跌</div>
-                                                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                                <div style={{ marginBottom: '20px' }}>
+                                                                    <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginBottom: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>📈 區間漲跌</div>
+                                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '6px' }}>
                                                                         {changePills.map(pill => {
                                                                             const val = detail?.[pill.key] as number | undefined;
                                                                             const isPositive = val != null && val >= 0;
                                                                             const color = val == null ? 'var(--color-text-muted)' : isPositive ? '#22c55e' : '#ef4444';
-                                                                            const bg = val == null ? 'rgba(255,255,255,0.04)' : isPositive ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+                                                                            const bg = val == null ? 'rgba(255,255,255,0.03)' : isPositive ? 'rgba(34, 197, 94, 0.08)' : 'rgba(239, 68, 68, 0.08)';
                                                                             return (
                                                                                 <div key={pill.key} style={{
                                                                                     display: 'flex', flexDirection: 'column', alignItems: 'center',
-                                                                                    padding: '8px 14px', borderRadius: '8px',
-                                                                                    background: bg, minWidth: '70px',
-                                                                                    border: `1px solid ${val == null ? 'rgba(255,255,255,0.06)' : isPositive ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
+                                                                                    padding: '10px 6px', borderRadius: '8px',
+                                                                                    background: bg,
+                                                                                    border: `1px solid ${val == null ? 'rgba(255,255,255,0.05)' : isPositive ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)'}`,
                                                                                 }}>
-                                                                                    <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>{pill.label}</span>
-                                                                                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color, fontFamily: 'var(--font-mono)' }}>
+                                                                                    <span style={{ fontSize: '0.6rem', color: 'var(--color-text-muted)', marginBottom: '5px', fontWeight: 500 }}>{pill.label}</span>
+                                                                                    <span style={{ fontSize: '0.82rem', fontWeight: 700, color, fontFamily: 'var(--font-mono)' }}>
                                                                                         {val != null ? `${val > 0 ? '▲' : val < 0 ? '▼' : ''}${Math.abs(val).toFixed(1)}%` : '--'}
                                                                                     </span>
                                                                                 </div>
@@ -313,37 +313,42 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
                                                                     </div>
                                                                 </div>
 
-                                                                {/* 市場概況卡片 */}
-                                                                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                                                                    {detail?.market_cap != null && (
-                                                                        <div style={statCardStyle}>
-                                                                            <span style={statLabelStyle}>市值</span>
-                                                                            <span style={statValueStyle}>${formatLargeNum(detail.market_cap)}</span>
+                                                                {/* 市場概況 - 僅有數據時顯示 */}
+                                                                {(detail?.market_cap != null || detail?.week_52_high != null || detail?.pe_ratio != null) && (
+                                                                    <div>
+                                                                        <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginBottom: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>📊 市場概況</div>
+                                                                        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${[detail?.market_cap, detail?.week_52_high, detail?.week_52_low, detail?.pe_ratio].filter(v => v != null).length}, 1fr)`, gap: '6px' }}>
+                                                                            {detail?.market_cap != null && (
+                                                                                <div style={statCardStyle}>
+                                                                                    <span style={statLabelStyle}>市值</span>
+                                                                                    <span style={statValueStyle}>${formatLargeNum(detail.market_cap)}</span>
+                                                                                </div>
+                                                                            )}
+                                                                            {detail?.week_52_high != null && (
+                                                                                <div style={statCardStyle}>
+                                                                                    <span style={statLabelStyle}>52W High</span>
+                                                                                    <span style={{ ...statValueStyle, color: '#22c55e' }}>
+                                                                                        {formatCurrency(detail.week_52_high, pos.category_slug)}
+                                                                                    </span>
+                                                                                </div>
+                                                                            )}
+                                                                            {detail?.week_52_low != null && (
+                                                                                <div style={statCardStyle}>
+                                                                                    <span style={statLabelStyle}>52W Low</span>
+                                                                                    <span style={{ ...statValueStyle, color: '#ef4444' }}>
+                                                                                        {formatCurrency(detail.week_52_low, pos.category_slug)}
+                                                                                    </span>
+                                                                                </div>
+                                                                            )}
+                                                                            {detail?.pe_ratio != null && (
+                                                                                <div style={statCardStyle}>
+                                                                                    <span style={statLabelStyle}>P/E</span>
+                                                                                    <span style={statValueStyle}>{detail.pe_ratio.toFixed(2)}</span>
+                                                                                </div>
+                                                                            )}
                                                                         </div>
-                                                                    )}
-                                                                    {detail?.week_52_high != null && (
-                                                                        <div style={statCardStyle}>
-                                                                            <span style={statLabelStyle}>52W High</span>
-                                                                            <span style={{ ...statValueStyle, color: '#22c55e' }}>
-                                                                                {formatCurrency(detail.week_52_high, pos.category_slug)}
-                                                                            </span>
-                                                                        </div>
-                                                                    )}
-                                                                    {detail?.week_52_low != null && (
-                                                                        <div style={statCardStyle}>
-                                                                            <span style={statLabelStyle}>52W Low</span>
-                                                                            <span style={{ ...statValueStyle, color: '#ef4444' }}>
-                                                                                {formatCurrency(detail.week_52_low, pos.category_slug)}
-                                                                            </span>
-                                                                        </div>
-                                                                    )}
-                                                                    {detail?.pe_ratio != null && (
-                                                                        <div style={statCardStyle}>
-                                                                            <span style={statLabelStyle}>P/E</span>
-                                                                            <span style={statValueStyle}>{detail.pe_ratio.toFixed(2)}</span>
-                                                                        </div>
-                                                                    )}
-                                                                </div>
+                                                                    </div>
+                                                                )}
                                                             </>
                                                         )}
                                                     </div>
@@ -384,7 +389,7 @@ const statCardStyle: React.CSSProperties = {
     padding: '10px 16px', borderRadius: '8px',
     background: 'rgba(255,255,255,0.03)',
     border: '1px solid rgba(255,255,255,0.06)',
-    display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '90px',
+    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px',
 };
 
 const statLabelStyle: React.CSSProperties = {

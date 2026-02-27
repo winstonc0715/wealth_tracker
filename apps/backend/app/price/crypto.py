@@ -127,8 +127,6 @@ class CryptoProvider(PriceProvider):
                 change_pct_60d=md.get("price_change_percentage_60d"),
                 change_pct_1y=md.get("price_change_percentage_1y"),
                 market_cap=md.get("market_cap", {}).get("usd"),
-                week_52_high=md.get("high_24h", {}).get("usd"),  # CoinGecko 用 ATH 近似
-                week_52_low=md.get("low_24h", {}).get("usd"),
                 currency="USD",
             )
         except httpx.HTTPError as e:
