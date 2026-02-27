@@ -97,6 +97,24 @@ async def search_symbols(
         await manager.close()
 
 
+@router.get("/market-detail", response_model=ApiResponse[dict])
+async def get_market_detail(
+    symbol: str,
+    category_slug: str,
+    user: User = Depends(get_current_user),
+):
+    """取得標的市場詳情（多時段漲跌、52W、PE 等）"""
+    from dataclasses import asdict
+
+    manager = PriceManager()
+    try:
+        detail = await manager.get_market_detail(symbol, category_slug)
+        return ApiResponse(data=asdict(detail))
+    except Exception as e:
+        logger.error("取得市場詳情失敗: %s", e)
+        raise HTTPException(status_code=500, detail=f"取得市場詳情失敗: {e}")
+
+
 @router.get("/{portfolio_id}", response_model=ApiResponse[PortfolioResponse])
 async def get_portfolio(
     portfolio_id: str,
@@ -175,24 +193,6 @@ async def get_portfolio_summary(
         logger.error("計算淨值失敗: %s", e)
         raise HTTPException(status_code=500, detail=f"計算淨值失敗: {e}")
 
-
-@router.get("/market-detail", response_model=ApiResponse[dict])
-async def get_market_detail(
-    symbol: str,
-    category_slug: str,
-    user: User = Depends(get_current_user),
-):
-    """取得標的市場詳情（多時段漲跌、52W、PE 等）"""
-    from app.price.manager import PriceManager
-    from dataclasses import asdict
-
-    manager = PriceManager()
-    try:
-        detail = await manager.get_market_detail(symbol, category_slug)
-        return ApiResponse(data=asdict(detail))
-    except Exception as e:
-        logger.error("取得市場詳情失敗: %s", e)
-        raise HTTPException(status_code=500, detail=f"取得市場詳情失敗: {e}")
 
 
 @router.get(
