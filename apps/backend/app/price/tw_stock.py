@@ -276,9 +276,25 @@ class TWStockProvider(PriceProvider):
             except Exception as e:
                 logger.warning(f"台股 {stock_id} twstock 取得失敗: {e}")
 
-        # 3. 24h 漲跌從現有即時報價取得
+        # 3. 24h 漲跌與其他中繼數據 (市值, PE)
         pct_24h = None
+        market_cap = None
+        pe_ratio = None
         try:
+            # 嘗試從 yfinance info 拿市值與 PE
+            yf_symbol = f"{stock_id}.TW"
+            ticker = yf.Ticker(yf_symbol)
+            info = ticker.info
+            if not info or not info.get("marketCap"):
+                yf_symbol = f"{stock_id}.TWO"
+                ticker = yf.Ticker(yf_symbol)
+                info = ticker.info
+                
+            if info:
+                market_cap = info.get("marketCap")
+                pe_ratio = info.get("trailingPE") or info.get("forwardPE")
+
+            # 24h 漲跌從現有即時報價取得
             price_data = self._fetch_price(symbol)
             if price_data.change_pct_24h is not None:
                 pct_24h = float(price_data.change_pct_24h)
@@ -293,8 +309,10 @@ class TWStockProvider(PriceProvider):
             change_pct_30d=changes.get("30d"),
             change_pct_60d=changes.get("60d"),
             change_pct_1y=changes.get("1y"),
+            market_cap=market_cap,
             week_52_high=week_52_high,
             week_52_low=week_52_low,
+            pe_ratio=pe_ratio,
             currency="TWD",
         )
 
