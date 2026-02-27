@@ -281,30 +281,42 @@ class TWStockProvider(PriceProvider):
         market_cap = None
         pe_ratio = None
         try:
-            # 嘗試從 yfinance info 拿市值與 PE
-            yf_symbol = f"{stock_id}.TW"
-            ticker = yf.Ticker(yf_symbol)
+            # 精確判斷後綴
+            suffixes = [".TW", ".TWO"]
+            try:
+                import twstock
+                if stock_id in twstock.codes:
+                    market = twstock.codes[stock_id].market
+                    suffixes = [".TW" if market == "上市" else ".TWO"]
+            except Exception:
+                pass
             
-            # 使用 fast_info 作為市值的主要來源，因為它更快更穩
-            try:
-                market_cap = ticker.fast_info.market_cap
-                if not market_cap or market_cap <= 0:
-                    ticker = yf.Ticker(f"{stock_id}.TWO")
-                    market_cap = ticker.fast_info.market_cap
-            except Exception as e:
-                logger.warning(f"台股 {stock_id} fast_info 取得失敗: {e}")
-
-            # PE 仍需從 info 取得
-            try:
-                info = ticker.info
-                if info:
-                    if not market_cap: # 如果 fast_info 沒抓到，補抓 info 的
+            # 輪詢可能的後綴獲取數據
+            for suffix in suffixes:
+                yf_symbol = f"{stock_id}{suffix}"
+                ticker = yf.Ticker(yf_symbol)
+                
+                # 1. 嘗試 info (最全)
+                try:
+                    info = ticker.info
+                    if info and info.get("marketCap"):
                         market_cap = info.get("marketCap")
-                    pe_ratio = info.get("trailingPE") or info.get("forwardPE")
-            except Exception as e:
-                logger.warning(f"台股 {stock_id} info 取得失敗: {e}")
+                        pe_ratio = info.get("trailingPE") or info.get("forwardPE")
+                        logger.info(f"台股 {stock_id} 透過 {suffix} info 取得市值: {market_cap}")
+                except Exception:
+                    pass
 
-            logger.info(f"台股 {stock_id} 診斷數據: Cap={market_cap}, PE={pe_ratio}")
+                # 2. 備援嘗試 fast_info (最穩)
+                if not market_cap:
+                    try:
+                        market_cap = ticker.fast_info.market_cap
+                        if market_cap:
+                            logger.info(f"台股 {stock_id} 透過 {suffix} fast_info 取得市值: {market_cap}")
+                    except Exception:
+                        pass
+                
+                if market_cap:
+                    break
 
             # 24h 漲跌從現有即時報價取得
             price_data = self._fetch_price(symbol)
