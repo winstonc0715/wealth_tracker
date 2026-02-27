@@ -84,39 +84,53 @@ class USStockProvider(PriceProvider):
         return await loop.run_in_executor(None, self._fetch_market_detail, symbol)
 
     def _fetch_market_detail(self, symbol: str) -> "MarketDetail":
-        """同步取得美股市場詳情"""
+        """同步取得美股市場詳情 (完全基於歷史數據計算以確保準確)"""
         import yfinance as yf
         from app.price.base import MarketDetail
 
         ticker = yf.Ticker(symbol)
-        info = ticker.info or {}
-
-        # 用歷史數據計算多時段漲跌
+        
+        # 1. 取得歷史數據
         changes: dict[str, float | None] = {}
+        week_52_high = None
+        week_52_low = None
+        market_cap = None
+        pe_ratio = None
+        pct_24h = None
+
         try:
             # 取得 2 年資料以確保能算出一年前的漲跌
             hist = ticker.history(period="2y")
             if not hist.empty:
                 current = float(hist['Close'].iloc[-1])
-                # yf 返回的是交易日數據，用估算的天數 (1週~5天, 1月~22天, 1年~252天)
+                
+                # 計算 52W 高低 (取最近 252 個交易日)
+                recent_1y = hist.iloc[-252:] if len(hist) > 252 else hist
+                week_52_high = float(recent_1y['High'].max())
+                week_52_low = float(recent_1y['Low'].min())
+
+                # 24h 漲跌
+                if len(hist) >= 2:
+                    prev = float(hist['Close'].iloc[-2])
+                    pct_24h = round(((current - prev) / prev) * 100, 2)
+                
+                # 計算各時段漲跌 (標籤, 交易日天數)
                 intervals = [("7d", 5), ("14d", 10), ("30d", 22), ("60d", 44), ("1y", 252)]
                 for label, days in intervals:
                     if len(hist) >= days + 1:
                         past = float(hist['Close'].iloc[-days - 1])
                         changes[label] = round(((current - past) / past) * 100, 2)
                     elif label == "1y" and len(hist) > 0:
-                        # 如果資料不夠 252 天但有資料，就以最舊的一筆當作 1y 參考
                         past = float(hist['Close'].iloc[0])
                         changes[label] = round(((current - past) / past) * 100, 2)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"美股 {symbol} 歷史數據計算失敗: {e}")
 
-        # 24h 漲跌
-        pct_24h = None
+        # 2. 市值與 PE 仍需從 info 取得 (若 info 失敗則保持 None)
         try:
-            fi = ticker.fast_info
-            if fi.previous_close and fi.last_price:
-                pct_24h = round(((fi.last_price - fi.previous_close) / fi.previous_close) * 100, 2)
+            info = ticker.info
+            market_cap = info.get("marketCap")
+            pe_ratio = info.get("trailingPE") or info.get("forwardPE")
         except Exception:
             pass
 
@@ -128,10 +142,10 @@ class USStockProvider(PriceProvider):
             change_pct_30d=changes.get("30d"),
             change_pct_60d=changes.get("60d"),
             change_pct_1y=changes.get("1y"),
-            market_cap=info.get("marketCap"),
-            week_52_high=info.get("fiftyTwoWeekHigh"),
-            week_52_low=info.get("fiftyTwoWeekLow"),
-            pe_ratio=info.get("trailingPE"),
+            market_cap=market_cap,
+            week_52_high=week_52_high,
+            week_52_low=week_52_low,
+            pe_ratio=pe_ratio,
             currency="USD",
         )
 
