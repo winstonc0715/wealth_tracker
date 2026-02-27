@@ -18,9 +18,9 @@ export default function TransactionsPage() {
     // 編輯 Modal 狀態
     const [editingTx, setEditingTx] = useState<Transaction | null>(null);
     const [editNote, setEditNote] = useState('');
-    const [editQuantity, setEditQuantity] = useState<number>(0);
-    const [editPrice, setEditPrice] = useState<number>(0);
-    const [editFee, setEditFee] = useState<number>(0);
+    const [editQuantity, setEditQuantity] = useState<string>('');
+    const [editPrice, setEditPrice] = useState<string>('');
+    const [editTotalCost, setEditTotalCost] = useState<string>('');
     const [editExecutedAt, setEditExecutedAt] = useState('');
     const [isUpdating, setIsUpdating] = useState(false);
     const [isRecalculating, setIsRecalculating] = useState(false);
@@ -61,15 +61,35 @@ export default function TransactionsPage() {
         }
     };
 
+    // 編輯交易：三欄互算邏輯
+    const handleEditQuantityChange = (val: string) => {
+        setEditQuantity(val);
+        const q = parseFloat(val);
+        const p = parseFloat(editPrice);
+        if (q > 0 && p > 0) setEditTotalCost((q * p).toFixed(2));
+    };
+    const handleEditPriceChange = (val: string) => {
+        setEditPrice(val);
+        const q = parseFloat(editQuantity);
+        const p = parseFloat(val);
+        if (q > 0 && p > 0) setEditTotalCost((q * p).toFixed(2));
+    };
+    const handleEditTotalCostChange = (val: string) => {
+        setEditTotalCost(val);
+        const q = parseFloat(editQuantity);
+        const t = parseFloat(val);
+        if (q > 0 && t > 0) setEditPrice((t / q).toFixed(4));
+    };
+
     const handleUpdate = async () => {
         if (!editingTx) return;
         setIsUpdating(true);
         try {
             await apiClient.updateTransaction(editingTx.id, {
                 note: editNote,
-                quantity: editQuantity,
-                unit_price: editPrice,
-                fee: editFee,
+                quantity: parseFloat(editQuantity) || 0,
+                unit_price: parseFloat(editPrice) || 0,
+                fee: 0,
                 executed_at: editExecutedAt
             });
             setEditingTx(null);
@@ -189,9 +209,11 @@ export default function TransactionsPage() {
                                                 onClick={() => {
                                                     setEditingTx(tx);
                                                     setEditNote(tx.note || '');
-                                                    setEditQuantity(Number(tx.quantity));
-                                                    setEditPrice(Number(tx.unit_price));
-                                                    setEditFee(Number(tx.fee));
+                                                    const q = Number(tx.quantity);
+                                                    const p = Number(tx.unit_price);
+                                                    setEditQuantity(q.toString());
+                                                    setEditPrice(p.toString());
+                                                    setEditTotalCost((q * p).toFixed(2));
                                                     // 將 ISO 時間轉換為 datetime-local 格式
                                                     const dt = new Date(tx.executed_at);
                                                     const localStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}T${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
@@ -258,28 +280,31 @@ export default function TransactionsPage() {
                                 <input
                                     type="number"
                                     className="input-field"
+                                    step="any"
                                     value={editQuantity}
-                                    onChange={e => setEditQuantity(Number(e.target.value))}
+                                    onChange={e => handleEditQuantityChange(e.target.value)}
                                 />
                             </div>
                             <div>
-                                <label style={labelStyle}>單價</label>
+                                <label style={labelStyle}>均價</label>
                                 <input
                                     type="number"
                                     className="input-field"
+                                    step="any"
                                     value={editPrice}
-                                    onChange={e => setEditPrice(Number(e.target.value))}
+                                    onChange={e => handleEditPriceChange(e.target.value)}
                                 />
                             </div>
                         </div>
 
                         <div style={{ marginBottom: '16px' }}>
-                            <label style={labelStyle}>手續費</label>
+                            <label style={labelStyle}>總成本</label>
                             <input
                                 type="number"
                                 className="input-field"
-                                value={editFee}
-                                onChange={e => setEditFee(Number(e.target.value))}
+                                step="any"
+                                value={editTotalCost}
+                                onChange={e => handleEditTotalCostChange(e.target.value)}
                             />
                         </div>
 
