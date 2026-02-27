@@ -296,13 +296,15 @@ class TWStockProvider(PriceProvider):
                 yf_symbol = f"{stock_id}{suffix}"
                 ticker = yf.Ticker(yf_symbol)
                 
-                # 1. 嘗試 info (最全)
+                # 1. 嘗試 info (取市值、資產、PE)
                 try:
                     info = ticker.info
-                    if info and info.get("marketCap"):
-                        market_cap = info.get("marketCap")
+                    if info:
+                        # ETF 通常沒有 marketCap，改用 totalAssets 或 netAssets
+                        market_cap = info.get("marketCap") or info.get("totalAssets") or info.get("netAssets")
                         pe_ratio = info.get("trailingPE") or info.get("forwardPE")
-                        logger.info(f"台股 {stock_id} 透過 {suffix} info 取得市值: {market_cap}")
+                        if market_cap:
+                            logger.info(f"台股 {stock_id} 透過 {suffix} info 取得規模: {market_cap}")
                 except Exception:
                     pass
 

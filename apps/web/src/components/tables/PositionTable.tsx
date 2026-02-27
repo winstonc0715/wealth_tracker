@@ -269,12 +269,17 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
                                             { label: '1年', key: 'change_pct_1y' },
                                         ];
 
-                                        const formatLargeNum = (num: number | undefined | null) => {
+                                        const formatLargeNum = (num: number | undefined | null, categorySlug: string) => {
                                             if (num == null) return '--';
-                                            if (num >= 1e12) return `${(num / 1e12).toFixed(2)}T`;
-                                            if (num >= 1e9) return `${(num / 1e9).toFixed(2)}B`;
-                                            if (num >= 1e6) return `${(num / 1e6).toFixed(2)}M`;
-                                            return num.toLocaleString();
+                                            const symbol = (categorySlug === 'us_stock' || categorySlug === 'crypto') ? '$' : 'NT$ ';
+
+                                            let formatted = '';
+                                            if (num >= 1e12) formatted = `${(num / 1e12).toFixed(2)}T`;
+                                            else if (num >= 1e9) formatted = `${(num / 1e9).toFixed(2)}B`;
+                                            else if (num >= 1e6) formatted = `${(num / 1e6).toFixed(2)}M`;
+                                            else formatted = num.toLocaleString();
+
+                                            return `${symbol}${formatted}`;
                                         };
 
                                         return (
@@ -314,7 +319,7 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
                                                                 {/* 市場概況 - 同樣撐滿 */}
                                                                 {(detail?.market_cap != null || detail?.week_52_high != null || detail?.pe_ratio != null) && (() => {
                                                                     const stats: { label: string; value: string; color?: string }[] = [];
-                                                                    if (detail?.market_cap != null) stats.push({ label: '市值', value: `$${formatLargeNum(detail.market_cap)}` });
+                                                                    if (detail?.market_cap != null) stats.push({ label: '市值', value: formatLargeNum(detail.market_cap, pos.category_slug) });
                                                                     if (detail?.week_52_high != null) stats.push({ label: '52W High', value: formatCurrency(detail.week_52_high, pos.category_slug), color: '#22c55e' });
                                                                     if (detail?.week_52_low != null) stats.push({ label: '52W Low', value: formatCurrency(detail.week_52_low, pos.category_slug), color: '#ef4444' });
                                                                     if (detail?.pe_ratio != null) stats.push({ label: 'P/E', value: detail.pe_ratio.toFixed(2) });
