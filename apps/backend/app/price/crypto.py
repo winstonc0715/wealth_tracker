@@ -100,11 +100,13 @@ class CryptoProvider(PriceProvider):
             raise ProviderError(f"CoinGecko API 錯誤: {e}") from e
 
     async def get_market_detail(self, symbol: str) -> "MarketDetail":
-        """取得加密貨幣市場詳情"""
+        """取得加密貨幣市場詳情（含 52W 高低點）"""
         from app.price.base import MarketDetail
         coin_id = self._get_coin_id(symbol)
         try:
-            response = await self._client.get(
+            # 同時請求基本資訊和 OHLC 歷史
+            import asyncio
+            info_task = self._client.get(
                 f"/coins/{coin_id}",
                 params={
                     "localization": "false",
@@ -114,9 +116,28 @@ class CryptoProvider(PriceProvider):
                     "sparkline": "false",
                 },
             )
-            response.raise_for_status()
-            data = response.json()
+            ohlc_task = self._client.get(
+                f"/coins/{coin_id}/ohlc",
+                params={"vs_currency": "usd", "days": 365},
+            )
+            info_resp, ohlc_resp = await asyncio.gather(info_task, ohlc_task)
+            info_resp.raise_for_status()
+            data = info_resp.json()
             md = data.get("market_data", {})
+
+            # 從 OHLC 數據計算 52W 高低點
+            week_52_high = None
+            week_52_low = None
+            try:
+                ohlc_resp.raise_for_status()
+                ohlc_data = ohlc_resp.json()
+                if ohlc_data:
+                    highs = [item[2] for item in ohlc_data]  # [ts, open, high, low, close]
+                    lows = [item[3] for item in ohlc_data]
+                    week_52_high = max(highs) if highs else None
+                    week_52_low = min(lows) if lows else None
+            except Exception:
+                pass  # OHLC 失敗不影響其他數據
 
             return MarketDetail(
                 symbol=symbol.upper(),
@@ -127,6 +148,8 @@ class CryptoProvider(PriceProvider):
                 change_pct_60d=md.get("price_change_percentage_60d"),
                 change_pct_1y=md.get("price_change_percentage_1y"),
                 market_cap=md.get("market_cap", {}).get("usd"),
+                week_52_high=week_52_high,
+                week_52_low=week_52_low,
                 currency="USD",
             )
         except httpx.HTTPError as e:

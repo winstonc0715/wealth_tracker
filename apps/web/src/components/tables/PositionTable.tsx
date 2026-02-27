@@ -286,25 +286,23 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
                                                                 ⏳ 載入市場數據...
                                                             </div>
                                                         ) : (
-                                                            <>
-                                                                {/* 多時段漲跌 */}
-                                                                <div style={{ marginBottom: '20px' }}>
-                                                                    <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginBottom: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>📈 區間漲跌</div>
-                                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '6px' }}>
-                                                                        {changePills.map(pill => {
+                                                            <div style={{ width: '100%' }}>
+                                                                {/* 區間漲跌 - 表格式 */}
+                                                                <div style={{ marginBottom: '16px' }}>
+                                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '0', borderRadius: '10px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)' }}>
+                                                                        {changePills.map((pill, i) => {
                                                                             const val = detail?.[pill.key] as number | undefined;
                                                                             const isPositive = val != null && val >= 0;
                                                                             const color = val == null ? 'var(--color-text-muted)' : isPositive ? '#22c55e' : '#ef4444';
-                                                                            const bg = val == null ? 'rgba(255,255,255,0.03)' : isPositive ? 'rgba(34, 197, 94, 0.08)' : 'rgba(239, 68, 68, 0.08)';
                                                                             return (
                                                                                 <div key={pill.key} style={{
                                                                                     display: 'flex', flexDirection: 'column', alignItems: 'center',
-                                                                                    padding: '10px 6px', borderRadius: '8px',
-                                                                                    background: bg,
-                                                                                    border: `1px solid ${val == null ? 'rgba(255,255,255,0.05)' : isPositive ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)'}`,
+                                                                                    padding: '12px 8px',
+                                                                                    background: 'rgba(255,255,255,0.02)',
+                                                                                    borderRight: i < 5 ? '1px solid rgba(255,255,255,0.06)' : 'none',
                                                                                 }}>
-                                                                                    <span style={{ fontSize: '0.6rem', color: 'var(--color-text-muted)', marginBottom: '5px', fontWeight: 500 }}>{pill.label}</span>
-                                                                                    <span style={{ fontSize: '0.82rem', fontWeight: 700, color, fontFamily: 'var(--font-mono)' }}>
+                                                                                    <span style={{ fontSize: '0.6rem', color: 'var(--color-text-muted)', marginBottom: '6px', fontWeight: 500 }}>{pill.label}</span>
+                                                                                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color, fontFamily: 'var(--font-mono)' }}>
                                                                                         {val != null ? `${val > 0 ? '▲' : val < 0 ? '▼' : ''}${Math.abs(val).toFixed(1)}%` : '--'}
                                                                                     </span>
                                                                                 </div>
@@ -313,43 +311,32 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
                                                                     </div>
                                                                 </div>
 
-                                                                {/* 市場概況 - 僅有數據時顯示 */}
-                                                                {(detail?.market_cap != null || detail?.week_52_high != null || detail?.pe_ratio != null) && (
-                                                                    <div>
-                                                                        <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginBottom: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>📊 市場概況</div>
-                                                                        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${[detail?.market_cap, detail?.week_52_high, detail?.week_52_low, detail?.pe_ratio].filter(v => v != null).length}, 1fr)`, gap: '6px' }}>
-                                                                            {detail?.market_cap != null && (
-                                                                                <div style={statCardStyle}>
-                                                                                    <span style={statLabelStyle}>市值</span>
-                                                                                    <span style={statValueStyle}>${formatLargeNum(detail.market_cap)}</span>
-                                                                                </div>
-                                                                            )}
-                                                                            {detail?.week_52_high != null && (
-                                                                                <div style={statCardStyle}>
-                                                                                    <span style={statLabelStyle}>52W High</span>
-                                                                                    <span style={{ ...statValueStyle, color: '#22c55e' }}>
-                                                                                        {formatCurrency(detail.week_52_high, pos.category_slug)}
+                                                                {/* 市場概況 - 同樣撐滿 */}
+                                                                {(detail?.market_cap != null || detail?.week_52_high != null || detail?.pe_ratio != null) && (() => {
+                                                                    const stats: { label: string; value: string; color?: string }[] = [];
+                                                                    if (detail?.market_cap != null) stats.push({ label: '市值', value: `$${formatLargeNum(detail.market_cap)}` });
+                                                                    if (detail?.week_52_high != null) stats.push({ label: '52W High', value: formatCurrency(detail.week_52_high, pos.category_slug), color: '#22c55e' });
+                                                                    if (detail?.week_52_low != null) stats.push({ label: '52W Low', value: formatCurrency(detail.week_52_low, pos.category_slug), color: '#ef4444' });
+                                                                    if (detail?.pe_ratio != null) stats.push({ label: 'P/E', value: detail.pe_ratio.toFixed(2) });
+                                                                    return (
+                                                                        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${stats.length}, 1fr)`, gap: '0', borderRadius: '10px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)' }}>
+                                                                            {stats.map((stat, i) => (
+                                                                                <div key={stat.label} style={{
+                                                                                    display: 'flex', flexDirection: 'column', alignItems: 'center',
+                                                                                    padding: '12px 8px',
+                                                                                    background: 'rgba(255,255,255,0.02)',
+                                                                                    borderRight: i < stats.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none',
+                                                                                }}>
+                                                                                    <span style={{ fontSize: '0.6rem', color: 'var(--color-text-muted)', marginBottom: '6px', fontWeight: 500 }}>{stat.label}</span>
+                                                                                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: stat.color || 'var(--color-text-primary)', fontFamily: 'var(--font-mono)' }}>
+                                                                                        {stat.value}
                                                                                     </span>
                                                                                 </div>
-                                                                            )}
-                                                                            {detail?.week_52_low != null && (
-                                                                                <div style={statCardStyle}>
-                                                                                    <span style={statLabelStyle}>52W Low</span>
-                                                                                    <span style={{ ...statValueStyle, color: '#ef4444' }}>
-                                                                                        {formatCurrency(detail.week_52_low, pos.category_slug)}
-                                                                                    </span>
-                                                                                </div>
-                                                                            )}
-                                                                            {detail?.pe_ratio != null && (
-                                                                                <div style={statCardStyle}>
-                                                                                    <span style={statLabelStyle}>P/E</span>
-                                                                                    <span style={statValueStyle}>{detail.pe_ratio.toFixed(2)}</span>
-                                                                                </div>
-                                                                            )}
+                                                                            ))}
                                                                         </div>
-                                                                    </div>
-                                                                )}
-                                                            </>
+                                                                    );
+                                                                })()}
+                                                            </div>
                                                         )}
                                                     </div>
                                                 </td>
