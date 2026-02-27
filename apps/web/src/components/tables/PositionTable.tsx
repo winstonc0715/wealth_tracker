@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import type { PositionDetail } from '@/lib/api-client';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import apiClient from '@/lib/api-client';
+import type { PositionDetail, MarketDetail } from '@/lib/api-client';
 
 interface PositionTableProps {
     positions: PositionDetail[];
@@ -25,6 +26,21 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
     const [sortColumn, setSortColumn] = useState<SortColumn>('total_value');
     const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
     const [expandedId, setExpandedId] = useState<string | null>(null);
+    const [marketDetailCache, setMarketDetailCache] = useState<Record<string, MarketDetail | 'loading'>>({});
+
+    // 展開時 lazy-load 市場詳情
+    const loadMarketDetail = useCallback(async (symbol: string, categorySlug: string) => {
+        if (marketDetailCache[symbol]) return; // 已載入或載入中
+        setMarketDetailCache(prev => ({ ...prev, [symbol]: 'loading' }));
+        try {
+            const res = await apiClient.getMarketDetail(symbol, categorySlug);
+            if (res.data) {
+                setMarketDetailCache(prev => ({ ...prev, [symbol]: res.data! }));
+            }
+        } catch {
+            setMarketDetailCache(prev => { const n = { ...prev }; delete n[symbol]; return n; });
+        }
+    }, [marketDetailCache]);
 
     // 計算總資產用於占比條 (修復：使用換算後的基準幣別價值)
     const totalAssets = useMemo(() =>
@@ -238,28 +254,103 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
                                     </tr>
 
                                     {/* 詳情展開面板 */}
-                                    {isExpanded && (
-                                        <tr>
-                                            <td colSpan={7} style={{ padding: '0', background: 'var(--color-bg-secondary)' }}>
-                                                <div style={{ padding: '20px 24px', animation: 'fadeIn 0.3s ease' }}>
-                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
-                                                        <div>
-                                                            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '8px' }}>💡 資產分析</div>
-                                                            <div style={{ fontSize: '0.9rem' }}>
-                                                                此持倉佔總資產的 <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>{weight.toFixed(2)}%</span>。
-                                                                目前的平均成本為 {formatCurrency(Number(pos.avg_cost), pos.category_slug)}。
+                                    {isExpanded && (() => {
+                                        const md = marketDetailCache[pos.symbol];
+                                        if (!md) loadMarketDetail(pos.symbol, pos.category_slug);
+                                        const isLoading = !md || md === 'loading';
+                                        const detail = (md && md !== 'loading') ? md : null;
+
+                                        const changePills: { label: string; key: keyof MarketDetail }[] = [
+                                            { label: '24小時', key: 'change_pct_24h' },
+                                            { label: '7天', key: 'change_pct_7d' },
+                                            { label: '14天', key: 'change_pct_14d' },
+                                            { label: '30天', key: 'change_pct_30d' },
+                                            { label: '60天', key: 'change_pct_60d' },
+                                            { label: '1年', key: 'change_pct_1y' },
+                                        ];
+
+                                        const formatLargeNum = (num: number | undefined | null) => {
+                                            if (num == null) return '--';
+                                            if (num >= 1e12) return `${(num / 1e12).toFixed(2)}T`;
+                                            if (num >= 1e9) return `${(num / 1e9).toFixed(2)}B`;
+                                            if (num >= 1e6) return `${(num / 1e6).toFixed(2)}M`;
+                                            return num.toLocaleString();
+                                        };
+
+                                        return (
+                                            <tr>
+                                                <td colSpan={7} style={{ padding: '0', background: 'var(--color-bg-secondary)' }}>
+                                                    <div style={{ padding: '20px 24px', animation: 'fadeIn 0.3s ease' }}>
+                                                        {isLoading ? (
+                                                            <div style={{ textAlign: 'center', padding: '16px', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                                                                ⏳ 載入市場數據...
                                                             </div>
-                                                        </div>
-                                                        <div style={{ textAlign: 'right' }}>
-                                                            <button className="btn-secondary" style={{ fontSize: '0.8rem', padding: '6px 12px' }}>
-                                                                查看交易歷史 →
-                                                            </button>
-                                                        </div>
+                                                        ) : (
+                                                            <>
+                                                                {/* 多時段漲跌 */}
+                                                                <div style={{ marginBottom: '16px' }}>
+                                                                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '10px', fontWeight: 600 }}>📈 區間漲跌</div>
+                                                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                                        {changePills.map(pill => {
+                                                                            const val = detail?.[pill.key] as number | undefined;
+                                                                            const isPositive = val != null && val >= 0;
+                                                                            const color = val == null ? 'var(--color-text-muted)' : isPositive ? '#22c55e' : '#ef4444';
+                                                                            const bg = val == null ? 'rgba(255,255,255,0.04)' : isPositive ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+                                                                            return (
+                                                                                <div key={pill.key} style={{
+                                                                                    display: 'flex', flexDirection: 'column', alignItems: 'center',
+                                                                                    padding: '8px 14px', borderRadius: '8px',
+                                                                                    background: bg, minWidth: '70px',
+                                                                                    border: `1px solid ${val == null ? 'rgba(255,255,255,0.06)' : isPositive ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
+                                                                                }}>
+                                                                                    <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', marginBottom: '4px' }}>{pill.label}</span>
+                                                                                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color, fontFamily: 'var(--font-mono)' }}>
+                                                                                        {val != null ? `${val > 0 ? '▲' : val < 0 ? '▼' : ''}${Math.abs(val).toFixed(1)}%` : '--'}
+                                                                                    </span>
+                                                                                </div>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* 市場概況卡片 */}
+                                                                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                                                                    {detail?.market_cap != null && (
+                                                                        <div style={statCardStyle}>
+                                                                            <span style={statLabelStyle}>市值</span>
+                                                                            <span style={statValueStyle}>${formatLargeNum(detail.market_cap)}</span>
+                                                                        </div>
+                                                                    )}
+                                                                    {detail?.week_52_high != null && (
+                                                                        <div style={statCardStyle}>
+                                                                            <span style={statLabelStyle}>52W High</span>
+                                                                            <span style={{ ...statValueStyle, color: '#22c55e' }}>
+                                                                                {formatCurrency(detail.week_52_high, pos.category_slug)}
+                                                                            </span>
+                                                                        </div>
+                                                                    )}
+                                                                    {detail?.week_52_low != null && (
+                                                                        <div style={statCardStyle}>
+                                                                            <span style={statLabelStyle}>52W Low</span>
+                                                                            <span style={{ ...statValueStyle, color: '#ef4444' }}>
+                                                                                {formatCurrency(detail.week_52_low, pos.category_slug)}
+                                                                            </span>
+                                                                        </div>
+                                                                    )}
+                                                                    {detail?.pe_ratio != null && (
+                                                                        <div style={statCardStyle}>
+                                                                            <span style={statLabelStyle}>P/E</span>
+                                                                            <span style={statValueStyle}>{detail.pe_ratio.toFixed(2)}</span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </>
+                                                        )}
                                                     </div>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    )}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })()}
                                 </React.Fragment>
                             );
                         })}
@@ -288,6 +379,21 @@ const actionBtnStyle = (type: 'buy' | 'sell') => ({
     fontSize: '0.7rem',
     fontWeight: 600,
 });
+
+const statCardStyle: React.CSSProperties = {
+    padding: '10px 16px', borderRadius: '8px',
+    background: 'rgba(255,255,255,0.03)',
+    border: '1px solid rgba(255,255,255,0.06)',
+    display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '90px',
+};
+
+const statLabelStyle: React.CSSProperties = {
+    fontSize: '0.65rem', color: 'var(--color-text-muted)', fontWeight: 500,
+};
+
+const statValueStyle: React.CSSProperties = {
+    fontSize: '0.9rem', fontWeight: 700, fontFamily: 'var(--font-mono)',
+};
 
 export const CATEGORY_IDS: Record<string, number> = {
     tw_stock: 1,

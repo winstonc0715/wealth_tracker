@@ -77,6 +77,59 @@ class USStockProvider(PriceProvider):
             source="yahoo_finance",
         )
 
+    async def get_market_detail(self, symbol: str) -> "MarketDetail":
+        """取得美股市場詳情（52W、PE、市值、多時段漲跌）"""
+        import asyncio
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self._fetch_market_detail, symbol)
+
+    def _fetch_market_detail(self, symbol: str) -> "MarketDetail":
+        """同步取得美股市場詳情"""
+        import yfinance as yf
+        from app.price.base import MarketDetail
+
+        ticker = yf.Ticker(symbol)
+        info = ticker.info or {}
+
+        # 用歷史數據計算多時段漲跌
+        changes: dict[str, float | None] = {}
+        try:
+            hist = ticker.history(period="1y")
+            if not hist.empty:
+                current = hist['Close'].iloc[-1]
+                for label, days in [("7d", 5), ("14d", 10), ("30d", 22), ("60d", 44), ("1y", 252)]:
+                    if len(hist) > days:
+                        past = hist['Close'].iloc[-days - 1]
+                        changes[label] = round(((current - past) / past) * 100, 2)
+                    else:
+                        changes[label] = None
+        except Exception:
+            pass
+
+        # 24h 漲跌
+        pct_24h = None
+        try:
+            fi = ticker.fast_info
+            if fi.previous_close and fi.last_price:
+                pct_24h = round(((fi.last_price - fi.previous_close) / fi.previous_close) * 100, 2)
+        except Exception:
+            pass
+
+        return MarketDetail(
+            symbol=symbol.upper(),
+            change_pct_24h=pct_24h,
+            change_pct_7d=changes.get("7d"),
+            change_pct_14d=changes.get("14d"),
+            change_pct_30d=changes.get("30d"),
+            change_pct_60d=changes.get("60d"),
+            change_pct_1y=changes.get("1y"),
+            market_cap=info.get("marketCap"),
+            week_52_high=info.get("fiftyTwoWeekHigh"),
+            week_52_low=info.get("fiftyTwoWeekLow"),
+            pe_ratio=info.get("trailingPE"),
+            currency="USD",
+        )
+
     async def get_historical_prices(
         self, symbol: str, timeframe: str = "1M"
     ) -> list[HistoricalPrice]:

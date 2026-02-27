@@ -99,6 +99,41 @@ class CryptoProvider(PriceProvider):
         except httpx.HTTPError as e:
             raise ProviderError(f"CoinGecko API 錯誤: {e}") from e
 
+    async def get_market_detail(self, symbol: str) -> "MarketDetail":
+        """取得加密貨幣市場詳情"""
+        from app.price.base import MarketDetail
+        coin_id = self._get_coin_id(symbol)
+        try:
+            response = await self._client.get(
+                f"/coins/{coin_id}",
+                params={
+                    "localization": "false",
+                    "tickers": "false",
+                    "community_data": "false",
+                    "developer_data": "false",
+                    "sparkline": "false",
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            md = data.get("market_data", {})
+
+            return MarketDetail(
+                symbol=symbol.upper(),
+                change_pct_24h=md.get("price_change_percentage_24h"),
+                change_pct_7d=md.get("price_change_percentage_7d"),
+                change_pct_14d=md.get("price_change_percentage_14d"),
+                change_pct_30d=md.get("price_change_percentage_30d"),
+                change_pct_60d=md.get("price_change_percentage_60d"),
+                change_pct_1y=md.get("price_change_percentage_1y"),
+                market_cap=md.get("market_cap", {}).get("usd"),
+                week_52_high=md.get("high_24h", {}).get("usd"),  # CoinGecko 用 ATH 近似
+                week_52_low=md.get("low_24h", {}).get("usd"),
+                currency="USD",
+            )
+        except httpx.HTTPError as e:
+            raise ProviderError(f"CoinGecko 市場詳情錯誤: {e}") from e
+
     async def get_historical_prices(
         self, symbol: str, timeframe: str = "1M"
     ) -> list[HistoricalPrice]:

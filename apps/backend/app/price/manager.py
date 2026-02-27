@@ -136,6 +136,19 @@ class PriceManager:
 
         return await provider.get_historical_prices(symbol, timeframe)
 
+    async def get_market_detail(
+        self, symbol: str, category_slug: str
+    ) -> "MarketDetail":
+        """取得市場詳情（多時段漲跌、52W、PE 等）"""
+        from app.price.base import MarketDetail
+        provider_name = CATEGORY_PROVIDER_MAP.get(category_slug, "")
+        provider = self._providers.get(provider_name)
+
+        if not provider or not hasattr(provider, "get_market_detail"):
+            return MarketDetail(symbol=symbol)
+
+        return await provider.get_market_detail(symbol)
+
     async def get_prices_batch(
         self, items: list[tuple[str, str]], force_refresh: bool = False
     ) -> dict[str, PriceData]:

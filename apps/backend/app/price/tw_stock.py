@@ -191,6 +191,72 @@ class TWStockProvider(PriceProvider):
             logger.warning("twstock 未安裝，台股歷史資料暫不可用")
             return []
 
+    async def get_market_detail(self, symbol: str) -> "MarketDetail":
+        """取得台股市場詳情（52W、多時段漲跌）"""
+        import asyncio
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self._fetch_market_detail, symbol)
+
+    def _fetch_market_detail(self, symbol: str) -> "MarketDetail":
+        """同步取得台股市場詳情"""
+        from app.price.base import MarketDetail
+
+        stock_id = symbol.replace(".TW", "").replace(".TWO", "")
+        changes: dict[str, float | None] = {}
+        week_52_high = None
+        week_52_low = None
+
+        try:
+            import twstock
+            stock = twstock.Stock(stock_id)
+            # 取近 13 個月資料（含 52 週）
+            from datetime import date
+            today = date.today()
+            year_ago = today.year - 1
+            month_ago = today.month
+            data = stock.fetch_from(year_ago, month_ago)
+
+            if data:
+                closes = [d.close for d in data if d.close]
+                highs = [d.high for d in data if d.high]
+                lows = [d.low for d in data if d.low]
+
+                if closes:
+                    current = closes[-1]
+                    for label, days in [("7d", 5), ("14d", 10), ("30d", 22), ("60d", 44), ("1y", 252)]:
+                        if len(closes) > days:
+                            past = closes[-days - 1]
+                            changes[label] = round(((current - past) / past) * 100, 2)
+
+                if highs:
+                    week_52_high = max(highs)
+                if lows:
+                    week_52_low = min(lows)
+        except Exception as e:
+            logger.warning(f"台股 {stock_id} 市場詳情取得失敗: {e}")
+
+        # 24h 漲跌從現有報價取得
+        pct_24h = None
+        try:
+            price_data = self._fetch_price(symbol)
+            if price_data.change_pct_24h is not None:
+                pct_24h = float(price_data.change_pct_24h)
+        except Exception:
+            pass
+
+        return MarketDetail(
+            symbol=stock_id,
+            change_pct_24h=pct_24h,
+            change_pct_7d=changes.get("7d"),
+            change_pct_14d=changes.get("14d"),
+            change_pct_30d=changes.get("30d"),
+            change_pct_60d=changes.get("60d"),
+            change_pct_1y=changes.get("1y"),
+            week_52_high=week_52_high,
+            week_52_low=week_52_low,
+            currency="TWD",
+        )
+
     async def validate_symbol(self, symbol: str) -> bool:
         """驗證台股代碼"""
         try:

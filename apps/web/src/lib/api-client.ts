@@ -157,6 +157,10 @@ class ApiClient {
         return this.request<PortfolioSummary>(`/portfolio/${portfolioId}/summary`);
     }
 
+    async getMarketDetail(symbol: string, categorySlug: string) {
+        return this.request<MarketDetail>(`/portfolio/market-detail?symbol=${encodeURIComponent(symbol)}&category_slug=${categorySlug}`);
+    }
+
     async getAllocations(portfolioId: string) {
         return this.request<AllocationResponse>(`/portfolio/${portfolioId}/allocations`);
     }
@@ -255,6 +259,21 @@ export interface PositionDetail {
     total_value_base?: number;
     unrealized_pnl_base?: number;
     current_price_base?: number;
+}
+
+export interface MarketDetail {
+    symbol: string;
+    change_pct_24h?: number;
+    change_pct_7d?: number;
+    change_pct_14d?: number;
+    change_pct_30d?: number;
+    change_pct_60d?: number;
+    change_pct_1y?: number;
+    market_cap?: number;
+    week_52_high?: number;
+    week_52_low?: number;
+    pe_ratio?: number;
+    currency: string;
 }
 
 export interface PortfolioSummary {

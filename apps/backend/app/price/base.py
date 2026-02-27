@@ -23,6 +23,25 @@ class PriceData:
 
 
 @dataclass
+class MarketDetail:
+    """市場詳細資訊（展開面板用）"""
+    symbol: str
+    # 多時段漲跌幅 (%)
+    change_pct_24h: float | None = None
+    change_pct_7d: float | None = None
+    change_pct_14d: float | None = None
+    change_pct_30d: float | None = None
+    change_pct_60d: float | None = None
+    change_pct_1y: float | None = None
+    # 市場資訊
+    market_cap: float | None = None
+    week_52_high: float | None = None
+    week_52_low: float | None = None
+    pe_ratio: float | None = None
+    currency: str = "USD"
+
+
+@dataclass
 class SearchResult:
     """搜尋結果資料"""
     symbol: str
