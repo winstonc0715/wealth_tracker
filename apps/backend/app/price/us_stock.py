@@ -102,6 +102,14 @@ class USStockProvider(PriceProvider):
             # 取得 2 年資料以確保能算出一年前的漲跌
             hist = ticker.history(period="2y")
             if not hist.empty:
+                # --- 時效性檢查 ---
+                last_date = hist.index[-1].replace(tzinfo=None)
+                days_old = (datetime.now() - last_date).days
+                if days_old > 7:
+                    logger.warning(f"美股 {symbol} 數據過期 (最後日期: {last_date}, 距今 {days_old} 天)")
+                    # 若數據太舊，我們不應該回傳這些錯誤的數字
+                    return MarketDetail(symbol=symbol.upper(), currency="USD")
+                
                 current = float(hist['Close'].iloc[-1])
                 
                 # 計算 52W 高低 (取最近 252 個交易日)
@@ -118,11 +126,15 @@ class USStockProvider(PriceProvider):
                 intervals = [("7d", 5), ("14d", 10), ("30d", 22), ("60d", 44), ("1y", 252)]
                 for label, days in intervals:
                     if len(hist) >= days + 1:
+                        # 特殊處理 1y：如果資料長度明顯不足 252 天（例如一年內才上市），不應顯示 1y 漲跌
+                        if label == "1y" and len(hist) < 250: # 容許一點誤差，但新股必須過濾
+                            changes[label] = None
+                            continue
+                            
                         past = float(hist['Close'].iloc[-days - 1])
                         changes[label] = round(((current - past) / past) * 100, 2)
-                    elif label == "1y" and len(hist) > 0:
-                        past = float(hist['Close'].iloc[0])
-                        changes[label] = round(((current - past) / past) * 100, 2)
+                    else:
+                        changes[label] = None
         except Exception as e:
             logger.warning(f"美股 {symbol} 歷史數據計算失敗: {e}")
 

@@ -221,6 +221,14 @@ class TWStockProvider(PriceProvider):
                 hist = ticker.history(period="2y")
 
             if not hist.empty:
+                # --- 時效性檢查 ---
+                last_date = hist.index[-1].replace(tzinfo=None)
+                days_old = (datetime.now() - last_date).days
+                if days_old > 7:
+                    logger.warning(f"台股 {stock_id} 數據過期 (最後日期: {last_date}, 距今 {days_old} 天)")
+                    # 如果數據太舊，不使用 yfinance 資料，嘗試下一階段
+                    raise Exception("yfinance data is stale")
+
                 # 只取最近一年內的數據來算 52W 高低 (以免 2y 資料干擾 52W)
                 recent_1y = hist.iloc[-252:] if len(hist) > 252 else hist
                 week_52_high = float(recent_1y['High'].max())
@@ -232,16 +240,19 @@ class TWStockProvider(PriceProvider):
                 intervals = [("7d", 5), ("14d", 10), ("30d", 22), ("60d", 44), ("1y", 252)]
                 for label, days in intervals:
                     if len(hist) >= days + 1:
+                        # 特殊處理 1y：如果資料長度明顯不足（例如一年內才上市），不應顯示 1y 漲跌
+                        if label == "1y" and len(hist) < 250:
+                            changes[label] = None
+                            continue
+                            
                         past = float(hist['Close'].iloc[-days-1])
                         changes[label] = round(((current - past) / past) * 100, 2)
-                    elif label == "1y" and len(hist) > 0:
-                        # 如果資料不夠 252 天但有資料，就以最舊的一筆當作 1y 參考
-                        past = float(hist['Close'].iloc[0])
-                        changes[label] = round(((current - past) / past) * 100, 2)
+                    else:
+                        changes[label] = None
                 
                 logger.info(f"台股 {stock_id} 透過 yfinance 取得數據成功")
         except Exception as e:
-            logger.warning(f"台股 {stock_id} yfinance 備援失敗: {e}")
+            logger.warning(f"台股 {stock_id} yfinance 數據取得或時效檢查失敗: {e}")
 
         # 2. 如果 yfinance 沒抓到，嘗試 twstock (爬蟲)
         if not changes and not week_52_high:
