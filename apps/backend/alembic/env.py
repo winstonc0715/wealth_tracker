@@ -78,9 +78,11 @@ async def run_async_migrations() -> None:
 
     # 動態從設定獲取資料庫 URL
     url = settings.database_url
-    # 如果是同步驅動，轉換為異步
-    if url.startswith("postgresql://"):
-        url = url.replace("postgresql://", "postgresql+asyncpg://")
+    # 如果是同步驅動，轉換為異步（支援 postgres:// 和 postgresql://）
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),

@@ -5,8 +5,9 @@ WealthTracker 後端設定模組
 """
 
 from functools import lru_cache
-from typing import Literal
+from typing import Any, Literal
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -40,12 +41,21 @@ class Settings(BaseSettings):
     price_cache_ttl: int = 300  # 5 分鐘
 
     # === CORS ===
+    # 支援環境變數以逗號分隔設定，例如：
+    # CORS_ORIGINS=https://example.com,http://localhost:3000
     cors_origins: list[str] = [
         "http://localhost:3000",
         "http://localhost:8081",
         "https://wealth-tracker-web-brown.vercel.app",
-        "https://wealthtracker-web.vercel.app",
     ]
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v: Any) -> list[str]:
+        """支援從環境變數讀取逗號分隔的 CORS origins"""
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
 
     model_config = {
         "env_file": ".env",

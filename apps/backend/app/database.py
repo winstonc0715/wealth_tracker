@@ -2,9 +2,10 @@
 WealthTracker 資料庫連線模組
 
 支援 SQLAlchemy 2.0 async engine。
-開發模式使用 SQLite，生產環境使用 PostgreSQL。
+開發模式使用 SQLite，生產環境使用 PostgreSQL（Neon / Railway / Render）。
 """
 
+import logging
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import (
@@ -16,7 +17,34 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.config import get_settings
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
+
+
+def _build_db_url(raw_url: str) -> str:
+    """將各種資料庫 URL 格式轉換為 SQLAlchemy async 驅動程式格式。
+
+    支援：
+    - postgres://     → postgresql+asyncpg://  (Heroku/Railway/Neon 格式)
+    - postgresql://   → postgresql+asyncpg://
+    - postgresql+asyncpg:// → 不變
+    - sqlite+aiosqlite://   → 不變
+    """
+    if raw_url.startswith("postgres://"):
+        return raw_url.replace("postgres://", "postgresql+asyncpg://", 1)
+    if raw_url.startswith("postgresql://"):
+        return raw_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return raw_url
+
+
+def _needs_ssl(url: str) -> bool:
+    """判斷是否需要 SSL 連線（雲端 PostgreSQL 服務通常需要）"""
+    ssl_hosts = ["neon.tech", "supabase.co", "railway.app"]
+    return any(host in url for host in ssl_hosts) or "sslmode=require" in url
+
+
+# 建構資料庫 URL
+_db_url = _build_db_url(settings.database_url)
 
 # 根據資料庫類型調整引擎參數
 _engine_kwargs: dict = {
@@ -34,10 +62,13 @@ else:
         "pool_pre_ping": True,
     })
 
-# 自動轉換資料庫 URL 為非同步驅動程式
-_db_url = settings.database_url
-if _db_url.startswith("postgresql://"):
-    _db_url = _db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    # 雲端 PostgreSQL（如 Neon）需要 SSL 連線
+    if _needs_ssl(settings.database_url):
+        _engine_kwargs.setdefault("connect_args", {})
+        _engine_kwargs["connect_args"]["ssl"] = "require"
+        logger.info("已啟用 SSL 連線（偵測到雲端 PostgreSQL）")
+
+logger.info("資料庫引擎: %s", "SQLite" if settings.use_sqlite else "PostgreSQL")
 
 engine = create_async_engine(_db_url, **_engine_kwargs)
 
@@ -69,3 +100,4 @@ async def init_db() -> None:
     if settings.use_sqlite:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+

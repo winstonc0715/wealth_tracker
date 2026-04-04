@@ -1,0 +1,30 @@
+# Render Blueprint - WealthTracker Backend
+# 文件: https://docs.render.com/blueprint-spec
+
+services:
+  - type: web
+    name: wealthtracker-api
+    runtime: docker
+    # Monorepo: 指定後端子目錄為根目錄
+    rootDir: apps/backend
+    dockerfilePath: ./Dockerfile
+    plan: free
+    # 健康檢查
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true  # Render 自動生成隨機密鑰
+      - key: DATABASE_URL
+        sync: false  # 手動設定（Neon PostgreSQL URL）
+      - key: GOOGLE_CLIENT_ID
+        sync: false  # 手動設定
+      - key: JWT_EXPIRE_MINUTES
+        value: "43200"
+      - key: PRICE_CACHE_TTL
+        value: "300"
+      - key: CORS_ORIGINS
+        value: "https://wealth-tracker-web-brown.vercel.app,http://localhost:3000"
+      - key: ADMIN_EMAILS
+        sync: false  # 手動設定
