@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.winstonc0715.wealthtracker.backup</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/zhanghansheng/Downloads/project/wealth_tracker/scripts/maintenance/run_backup.sh</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>2</integer> <!-- 每天凌晨兩點執行 -->
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/Users/zhanghansheng/Downloads/project/wealth_tracker/logs/backup.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/zhanghansheng/Downloads/project/wealth_tracker/logs/backup.log</string>
+</dict>
+</plist>
