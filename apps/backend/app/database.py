@@ -30,11 +30,17 @@ def _build_db_url(raw_url: str) -> str:
     - postgresql+asyncpg:// → 不變
     - sqlite+aiosqlite://   → 不變
     """
-    if raw_url.startswith("postgres://"):
-        return raw_url.replace("postgres://", "postgresql+asyncpg://", 1)
-    if raw_url.startswith("postgresql://"):
-        return raw_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    return raw_url
+    url = raw_url
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    
+    # asyncpg 不支援 URL 中的 sslmode 參數，需將其從連線字串過濾（我們已在 connect_args 啟用 SSL）
+    if "?" in url and "sslmode=" in url:
+        url = url.split("?")[0]
+        
+    return url
 
 
 def _needs_ssl(url: str) -> bool:

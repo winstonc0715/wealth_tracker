@@ -84,11 +84,20 @@ async def run_async_migrations() -> None:
     elif url.startswith("postgresql://"):
         url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
+    connect_args = {}
+    ssl_hosts = ["neon.tech", "supabase.co", "railway.app"]
+    if any(host in settings.database_url for host in ssl_hosts) or "sslmode=require" in settings.database_url:
+        connect_args["ssl"] = "require"
+        
+    if "?" in url and "sslmode=" in url:
+        url = url.split("?")[0]
+
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
         url=url, # 覆蓋 ini 中的 url
+        connect_args=connect_args, # 加入 SSL 連線參數給 asyncpg
     )
 
     async with connectable.connect() as connection:
