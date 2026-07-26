@@ -85,7 +85,8 @@ class AllocationResponse(BaseModel):
 class NetWorthHistoryItem(BaseModel):
     """單日淨值歷史紀錄"""
     date: str
-    value: Decimal
+    value: Decimal            # 淨值（資產 − 負債）
+    assets: Decimal = Decimal("0")  # 總資產（不含負債），供走勢圖切換
 
 
 class PortfolioHistoryResponse(BaseModel):

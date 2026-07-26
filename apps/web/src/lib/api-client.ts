@@ -667,7 +667,8 @@ export interface AllocationResponse {
 
 export interface NetWorthHistoryItem {
     date: string;
-    value: number;
+    value: number;   // 淨值（含負債）
+    assets?: number; // 總資產（不含負債）
 }
 
 export interface PortfolioHistoryResponse {

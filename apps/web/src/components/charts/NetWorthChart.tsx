@@ -19,7 +19,7 @@ import {
 import { usePortfolioStore } from '@/stores/portfolio-store';
 
 interface NetWorthChartProps {
-    data: { date: string; value: number }[];
+    data: { date: string; value: number; assets?: number }[];
 }
 
 const PERIOD_DAYS: Record<string, number> = {
@@ -47,6 +47,8 @@ export default function NetWorthChart({ data }: NetWorthChartProps) {
     };
 
     const [isRefreshing, setIsRefreshing] = useState(false);
+    // 走勢是否計入負債：true=淨值（資產−負債），false=總資產
+    const [includeLiabilities, setIncludeLiabilities] = useState(true);
     const handleForceRefresh = async () => {
         if (!selectedPortfolio || isRefreshing) return;
         setIsRefreshing(true);
@@ -66,8 +68,15 @@ export default function NetWorthChart({ data }: NetWorthChartProps) {
         );
     }
 
+    // 依「是否計入負債」選擇要畫的序列
+    const seriesLabel = includeLiabilities ? '淨值' : '總資產';
+    const chartData = data.map((d) => ({
+        date: d.date,
+        value: includeLiabilities ? d.value : (d.assets ?? d.value),
+    }));
+
     // 判斷趨勢（漲/跌）
-    const isUp = data.length >= 2 && data[data.length - 1].value >= data[0].value;
+    const isUp = chartData.length >= 2 && chartData[chartData.length - 1].value >= chartData[0].value;
     const lineColor = isUp ? '#22c55e' : '#ef4444';
     const gradientId = 'netWorthGradient';
 
@@ -86,14 +95,39 @@ export default function NetWorthChart({ data }: NetWorthChartProps) {
         const val = displayCurrency === 'USD'
             ? `$ ${(num / exchangeRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
             : `NT$ ${num.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-        return [val, '淨值'];
+        return [val, seriesLabel];
     };
 
     return (
         <div className="card" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>淨值走勢</h3>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>{seriesLabel}走勢</h3>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    {/* 含負債（淨值）/ 不含負債（總資產）切換 */}
+                    <div style={{
+                        display: 'flex', borderRadius: '8px', overflow: 'hidden',
+                        border: '1px solid var(--color-border)',
+                    }}>
+                        {([
+                            { key: true, label: '淨值' },
+                            { key: false, label: '總資產' },
+                        ] as { key: boolean; label: string }[]).map((opt) => (
+                            <button
+                                key={opt.label}
+                                onClick={() => setIncludeLiabilities(opt.key)}
+                                title={opt.key ? '資產 − 負債' : '不計負債'}
+                                style={{
+                                    padding: '4px 10px', fontSize: '0.75rem', cursor: 'pointer',
+                                    border: 'none',
+                                    background: includeLiabilities === opt.key ? 'var(--color-primary)' : 'rgba(42, 42, 90, 0.3)',
+                                    color: includeLiabilities === opt.key ? '#fff' : 'var(--color-text-secondary)',
+                                    fontWeight: includeLiabilities === opt.key ? 700 : 400,
+                                }}
+                            >
+                                {opt.label}
+                            </button>
+                        ))}
+                    </div>
                     <button
                         className="btn-secondary"
                         style={{
@@ -127,7 +161,7 @@ export default function NetWorthChart({ data }: NetWorthChartProps) {
             </div>
             <div style={{ flex: 1, minHeight: 0 }}>
                 <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={data} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+                    <AreaChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
                         <defs>
                             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="0%" stopColor={lineColor} stopOpacity={0.3} />

@@ -313,12 +313,18 @@ class PortfolioService:
         result = await self.db.execute(stmt)
         records = result.scalars().all()
         record_map = {r.snapshot_date: r.net_worth for r in records}
+        # 各日負債（供「不含負債」序列：總資產 = 淨值 + 負債）
+        liab_map = {
+            r.snapshot_date: (r.total_liabilities or Decimal("0"))
+            for r in records
+        }
 
         # 為了保證即時圖表尾巴正確，今天若沒快照，自動補即時淨值
         if today not in record_map:
             try:
                 summary = await self.get_summary(portfolio_id, force_refresh)
                 record_map[today] = summary.net_worth
+                liab_map[today] = summary.total_liabilities
             except Exception:
                 pass
 
@@ -326,13 +332,16 @@ class PortfolioService:
         if not force_refresh and len(records) > (days * 0.8) and len(records) > 1:
             history = []
             last_known_value = records[0].net_worth
+            last_known_liab = liab_map.get(records[0].snapshot_date, Decimal("0"))
             for i in range(days):
                 current_date = start_date + timedelta(days=i)
                 if current_date in record_map:
                     last_known_value = record_map[current_date]
+                    last_known_liab = liab_map.get(current_date, Decimal("0"))
                 history.append(NetWorthHistoryItem(
                     date=f"{current_date.month}/{current_date.day}",
-                    value=last_known_value
+                    value=last_known_value,
+                    assets=last_known_value + last_known_liab,
                 ))
             return PortfolioHistoryResponse(portfolio_id=portfolio_id, history=history)
 
@@ -453,26 +462,35 @@ class PortfolioService:
                     holdings[key] = holdings.get(key, Decimal("0")) - qty
                 tx_idx += 1
 
-            # 根據今天的持倉總數，算出現值
-            daily_net_worth = Decimal("0")
+            # 根據今天的持倉總數，分開計算資產與負債
+            daily_assets = Decimal("0")
+            daily_liabilities = Decimal("0")
             for (sym, slug), qty in holdings.items():
                 if qty == 0: continue
-                
+
                 if slug == "liability":
-                    daily_net_worth -= qty
+                    daily_liabilities += qty
                 elif slug == "fiat":
-                    daily_net_worth += qty
+                    daily_assets += qty
                 else:
                     price = get_price_for_date(sym, current_date)
                     mult = usd_twd_rate if slug in ("us_stock", "crypto") else Decimal("1")
-                    daily_net_worth += (qty * price * mult)
+                    daily_assets += (qty * price * mult)
+
+            daily_net_worth = daily_assets - daily_liabilities
 
             # 若今天有快照則無條件信任快照，否則用回推算出的值
-            final_val = record_map.get(current_date, daily_net_worth)
+            if current_date in record_map:
+                final_val = record_map[current_date]
+                final_assets = final_val + liab_map.get(current_date, Decimal("0"))
+            else:
+                final_val = daily_net_worth
+                final_assets = daily_assets
 
             history.append(NetWorthHistoryItem(
                 date=f"{current_date.month}/{current_date.day}",
-                value=final_val
+                value=final_val,
+                assets=final_assets,
             ))
 
             # 將回溯計算出的結果持久化（不含今天，今天由即時排程處理）
@@ -481,8 +499,8 @@ class PortfolioService:
                     snapshot = HistoricalNetWorth(
                         portfolio_id=portfolio_id,
                         snapshot_date=current_date,
-                        total_assets=daily_net_worth if daily_net_worth > 0 else Decimal("0"),
-                        total_liabilities=Decimal("0"),
+                        total_assets=daily_assets,
+                        total_liabilities=daily_liabilities,
                         net_worth=daily_net_worth,
                     )
                     self.db.add(snapshot)
