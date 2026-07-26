@@ -147,13 +147,18 @@ async def backfill_payments(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """依日期推算自動補登過往還款（餘額同步沖減、歸零自動結清）"""
+    """依日期推算自動補登過往還款（先清理重複紀錄，餘額同步沖減、歸零自動結清）"""
     service = LiabilityService(db)
     try:
+        removed = await service.dedupe_backfill_payments(user.id, liability_id)
         count = await service.backfill_payments(user.id, liability_id)
+        parts = []
+        if removed:
+            parts.append(f"已清理 {removed} 筆重複紀錄")
+        parts.append(f"已補登 {count} 期還款")
         return ApiResponse(
             data=await service.get_liability(user.id, liability_id),
-            message=f"已補登 {count} 期還款",
+            message="、".join(parts),
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

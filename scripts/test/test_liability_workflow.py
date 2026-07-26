@@ -209,6 +209,50 @@ async def main() -> None:
         assert resp4.is_active is False, "餘額歸零應自動結清"
         print("✅ 情境 8：補登以餘額為上限 → 尾期沖到 0 並自動結清")
 
+        # === 9. 清理重複補登（模擬並發請求造成的重複） ===
+        import uuid as _uuid
+        from app.models.liability import LiabilityPayment  # noqa: E402
+
+        cat_id = await service._liability_category_id()
+        src_payments = (await session.execute(
+            select(LiabilityPayment).where(LiabilityPayment.liability_id == li3.id)
+        )).scalars().all()
+        assert len(src_payments) == 6
+        for _ in range(2):  # 模擬多按兩次 → 各期多出兩份重複
+            for src in src_payments:
+                dup_tx = Transaction(
+                    id=str(_uuid.uuid4()),
+                    portfolio_id=p.id, category_id=cat_id,
+                    symbol=li3.symbol, asset_name="信貸",
+                    tx_type=TransactionType.WITHDRAW,
+                    quantity=src.amount, unit_price=Decimal("1"),
+                    fee=Decimal("0"), currency="TWD",
+                    executed_at=datetime.combine(
+                        src.payment_date, datetime.min.time(), tzinfo=timezone.utc
+                    ),
+                )
+                session.add(dup_tx)
+                session.add(LiabilityPayment(
+                    liability_id=li3.id, payment_date=src.payment_date,
+                    amount=src.amount, transaction_id=dup_tx.id, note=src.note,
+                ))
+        await session.flush()
+
+        preview = await service.preview_backfill(demo_user.id, li3.id, as_of=as_of)
+        assert preview.duplicate_payments == 12, f"應偵測 12 筆重複，實際 {preview.duplicate_payments}"
+
+        removed = await service.dedupe_backfill_payments(demo_user.id, li3.id)
+        assert removed == 12, f"應清除 12 筆，實際 {removed}"
+        resp3 = await service.get_liability(demo_user.id, li3.id)
+        assert resp3.paid_periods == 6, f"清理後應剩 6 期，實際 {resp3.paid_periods}"
+        assert resp3.paid_amount == Decimal("60000")
+        assert resp3.outstanding_balance == Decimal("60000"), \
+            f"重算後餘額應為 60000，實際 {resp3.outstanding_balance}"
+        assert resp3.is_active is True
+        # 再跑一次應為 no-op
+        assert await service.dedupe_backfill_payments(demo_user.id, li3.id) == 0
+        print("✅ 情境 9：清理重複補登 → 保留每期一筆、餘額重算正確")
+
     print("\n🎉 全部通過")
 
 

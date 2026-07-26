@@ -222,6 +222,72 @@ class LiabilityService:
         if not liability.is_active:
             liability.is_active = True
 
+    @staticmethod
+    def _find_duplicate_backfills(
+        liability: Liability,
+    ) -> list[LiabilityPayment]:
+        """找出重複的自動補登紀錄（同日期＋同備註，保留最早一筆）"""
+        seen: dict[tuple[date, str], LiabilityPayment] = {}
+        duplicates: list[LiabilityPayment] = []
+        ordered = sorted(
+            liability.payments,
+            key=lambda p: (
+                p.payment_date,
+                p.created_at.isoformat() if p.created_at else "",
+            ),
+        )
+        for p in ordered:
+            if not (p.note and p.note.startswith("自動補登")):
+                continue
+            key = (p.payment_date, p.note)
+            if key in seen:
+                duplicates.append(p)
+            else:
+                seen[key] = p
+        return duplicates
+
+    async def dedupe_backfill_payments(
+        self, user_id: str, liability_id: str
+    ) -> int:
+        """清除重複的自動補登紀錄（連同沖減交易），並全量重算持倉"""
+        liability = await self._get_user_liability_locked(user_id, liability_id)
+        duplicates = self._find_duplicate_backfills(liability)
+        if not duplicates:
+            return 0
+
+        tx_ids = [p.transaction_id for p in duplicates if p.transaction_id]
+        earliest = min(p.payment_date for p in duplicates)
+
+        if tx_ids:
+            tx_rows = (await self.db.execute(
+                select(Transaction).where(Transaction.id.in_(tx_ids))
+            )).scalars().all()
+            for tx in tx_rows:
+                await self.db.delete(tx)
+        for p in duplicates:
+            await self.db.delete(p)
+        await self.db.flush()
+
+        # 全量重算持倉與快照，確保餘額回到正確狀態
+        tx_service = TransactionService(self.db)
+        await tx_service.recalculate_position(
+            liability.portfolio_id, liability.symbol
+        )
+        await tx_service._invalidate_snapshots(
+            liability.portfolio_id, earliest
+        )
+
+        position = await self._get_position(
+            liability.portfolio_id, liability.symbol
+        )
+        remaining = position.total_quantity if position else Decimal("0")
+        liability.is_active = remaining > 0
+
+        logger.info(
+            "負債「%s」清除 %d 筆重複補登紀錄", liability.name, len(duplicates)
+        )
+        return len(duplicates)
+
     async def preview_backfill(
         self, user_id: str, liability_id: str, as_of: date | None = None
     ) -> BackfillPreview:
@@ -255,6 +321,7 @@ class LiabilityService:
             pending_amount=pending_amount,
             first_date=pending_dates[0] if pending_dates else None,
             last_date=pending_dates[-1] if pending_dates else None,
+            duplicate_payments=len(self._find_duplicate_backfills(liability)),
         )
 
     async def backfill_payments(
@@ -263,9 +330,10 @@ class LiabilityService:
         """依日期推算補登過往還款：每期建立還款紀錄與沖減交易。
 
         金額以剩餘餘額為上限，餘額歸零即停（record_payment 會自動結清）。
-        重複執行安全：只補「已繳期數」到「應繳期數」之間的缺口。
+        重複執行安全：只補「已繳期數」到「應繳期數」之間的缺口，
+        且以列鎖序列化並發請求。
         """
-        liability = await self._get_user_liability(user_id, liability_id)
+        liability = await self._get_user_liability_locked(user_id, liability_id)
         as_of = as_of or date.today()
         expected = _expected_periods(liability, as_of)
         paid = len(liability.payments)
@@ -413,4 +481,26 @@ class LiabilityService:
         )
         if not liability or liability.user_id != user_id:
             raise ValueError("負債不存在")
+        return liability
+
+    async def _get_user_liability_locked(
+        self, user_id: str, liability_id: str
+    ) -> Liability:
+        """鎖定負債列後取得（序列化並發的補登/清理請求）。
+
+        Postgres 下 FOR UPDATE 讓同時觸發的請求依序執行，
+        後到者會看到先完成者的還款紀錄，避免重複補登；
+        SQLite（測試環境）忽略此鎖，行為不變。
+        """
+        stmt = (
+            select(Liability)
+            .where(Liability.id == liability_id)
+            .with_for_update()
+        )
+        result = await self.db.execute(stmt)
+        liability = result.scalar_one_or_none()
+        if not liability or liability.user_id != user_id:
+            raise ValueError("負債不存在")
+        # 取得鎖之後再載入還款紀錄，確保讀到最新狀態
+        await self.db.refresh(liability, ["payments"])
         return liability

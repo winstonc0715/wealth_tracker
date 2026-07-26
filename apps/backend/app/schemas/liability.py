@@ -65,6 +65,8 @@ class BackfillPreview(BaseModel):
     pending_amount: Decimal = Decimal("0")
     first_date: date | None = None
     last_date: date | None = None
+    # 偵測到的重複自動補登紀錄數（可一鍵清理）
+    duplicate_payments: int = 0
 
 
 class LiabilityResponse(BaseModel):

@@ -105,20 +105,29 @@ export default function LiabilitiesPage() {
         setBackfillingId(li.id);
         try {
             const preview = await apiClient.previewLiabilityBackfill(li.id);
-            if (preview.pending_periods === 0) {
-                flash('沒有需要補登的期數');
+            if (preview.pending_periods === 0 && preview.duplicate_payments === 0) {
+                flash('紀錄正常，沒有需要補登或清理的項目');
                 return;
             }
-            const ok = confirm(
-                `依起始日推算，「${li.name}」至今應已繳 ${preview.expected_periods} 期，` +
-                `目前記錄 ${preview.paid_periods} 期。\n\n` +
-                `將自動補登 ${preview.pending_periods} 期還款` +
-                `（${preview.first_date} ~ ${preview.last_date}，` +
-                `合計 ${fmtMoney(preview.pending_amount, li.currency)}），餘額會同步沖減。\n確定執行？`
-            );
+            const lines: string[] = [];
+            if (preview.duplicate_payments > 0) {
+                lines.push(`偵測到 ${preview.duplicate_payments} 筆重複的自動補登紀錄，將清除並重算餘額。`);
+            }
+            if (preview.pending_periods > 0) {
+                lines.push(
+                    `依起始日推算應已繳 ${preview.expected_periods} 期，目前記錄 ${preview.paid_periods} 期，` +
+                    `將補登 ${preview.pending_periods} 期還款` +
+                    `（${preview.first_date} ~ ${preview.last_date}，` +
+                    `合計 ${fmtMoney(preview.pending_amount, li.currency)}）。`
+                );
+            }
+            const ok = confirm(`「${li.name}」\n\n${lines.join('\n')}\n\n確定執行？`);
             if (!ok) return;
             await apiClient.backfillLiabilityPayments(li.id);
-            flash(`✅ 已補登 ${preview.pending_periods} 期還款`);
+            const done: string[] = [];
+            if (preview.duplicate_payments > 0) done.push(`清理 ${preview.duplicate_payments} 筆重複`);
+            if (preview.pending_periods > 0) done.push(`補登 ${preview.pending_periods} 期`);
+            flash(`✅ 已${done.join('、')}`);
             await Promise.all([fetchLiabilities(), refreshAll()]);
         } catch (err) {
             setError((err as Error).message);
@@ -348,8 +357,8 @@ export default function LiabilitiesPage() {
                                         </div>
                                     </div>
 
-                                    {/* 依日期推算落後提示 */}
-                                    {li.is_active && li.expected_periods > li.paid_periods && (
+                                    {/* 依日期推算落後/超繳提示 */}
+                                    {li.is_active && li.expected_periods !== li.paid_periods && (
                                         <div style={{
                                             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                                             padding: '8px 12px', borderRadius: '8px', marginBottom: '10px',
@@ -357,7 +366,9 @@ export default function LiabilitiesPage() {
                                         }}>
                                             <span style={{ fontSize: '0.78rem', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                                 <CalendarClock size={13} />
-                                                依日期推算應已繳 {li.expected_periods} 期，落後 {li.expected_periods - li.paid_periods} 期
+                                                {li.expected_periods > li.paid_periods
+                                                    ? `依日期推算應已繳 ${li.expected_periods} 期，落後 ${li.expected_periods - li.paid_periods} 期`
+                                                    : `已還期數（${li.paid_periods}）超過依日期推算（${li.expected_periods}），可能有重複補登`}
                                             </span>
                                             <button
                                                 onClick={() => handleBackfill(li)}
@@ -370,7 +381,9 @@ export default function LiabilitiesPage() {
                                                     opacity: backfillingId === li.id ? 0.6 : 1,
                                                 }}>
                                                 <History size={12} />
-                                                {backfillingId === li.id ? '補登中...' : '一鍵補登至今日'}
+                                                {backfillingId === li.id
+                                                    ? '處理中...'
+                                                    : li.expected_periods > li.paid_periods ? '一鍵補登至今日' : '檢查並清理'}
                                             </button>
                                         </div>
                                     )}

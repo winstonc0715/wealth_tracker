@@ -84,6 +84,7 @@ export interface LiabilityBackfillPreview {
     pending_amount: number;
     first_date: string | null;
     last_date: string | null;
+    duplicate_payments: number;
 }
 
 export interface LiabilityInput {
