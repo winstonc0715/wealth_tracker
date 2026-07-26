@@ -43,6 +43,78 @@ export interface SearchResult {
     category_slug?: string;
 }
 
+// === 定期定額 (DCA) 介面 ===
+export interface DCASchedule {
+    id: string;
+    user_id: string;
+    portfolio_id: string;
+    symbol: string;
+    asset_name: string | null;
+    category_id: number;
+    broker: string;
+    investment_type: 'amount' | 'shares';
+    target_amount: number | null;
+    target_shares: number | null;
+    execution_days: number[];
+    fee_discount: number;
+    auto_confirm: boolean;
+    is_active: boolean;
+    created_at: string;
+    updated_at: string;
+    next_execution_date: string | null;
+    pending_count: number;
+}
+
+export interface DCAScheduleInput {
+    portfolio_id: string;
+    symbol: string;
+    asset_name?: string;
+    category_id?: number;
+    broker?: string;
+    investment_type: 'amount' | 'shares';
+    target_amount?: number;
+    target_shares?: number;
+    execution_days: number[];
+    fee_discount?: number;
+    auto_confirm?: boolean;
+}
+
+export interface DCAExecution {
+    id: string;
+    schedule_id: string;
+    execution_date: string;
+    status: 'pending' | 'confirmed' | 'skipped' | 'failed';
+    estimated_price: number | null;
+    actual_price: number | null;
+    quantity: number | null;
+    fee: number | null;
+    total_cost: number | null;
+    transaction_id: string | null;
+    note: string | null;
+    created_at: string;
+    confirmed_at: string | null;
+    schedule_symbol: string | null;
+    schedule_asset_name: string | null;
+}
+
+export interface DCAExecutionConfirm {
+    actual_price?: number;
+    note?: string;
+}
+
+export interface DCAImportResult {
+    total_rows: number;
+    imported: number;
+    skipped: number;
+    schedules_created: number;
+    schedules_updated: number;
+    executions_created: number;
+    executions_updated: number;
+    transactions_created: number;
+    transactions_updated: number;
+    errors: string[];
+}
+
 class ApiClient {
     private baseUrl: string;
 
@@ -231,6 +303,101 @@ class ApiClient {
             body: formData,
         });
         return response.json();
+    }
+
+    // === 定期定額 (DCA) ===
+    async getDCASchedules(): Promise<DCASchedule[]> {
+        const res = await this.request<DCASchedule[]>('/dca/schedules');
+        return res.data || [];
+    }
+
+    async createDCASchedule(data: DCAScheduleInput): Promise<DCASchedule> {
+        const res = await this.request<DCASchedule>('/dca/schedules', { method: 'POST', body: JSON.stringify(data) });
+        if (!res.data) throw new Error('建立定期定額計畫失敗');
+        return res.data;
+    }
+
+    async updateDCASchedule(id: string, data: Partial<DCAScheduleInput>): Promise<DCASchedule> {
+        const res = await this.request<DCASchedule>(`/dca/schedules/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+        if (!res.data) throw new Error('更新定期定額計畫失敗');
+        return res.data;
+    }
+
+    async deleteDCASchedule(id: string): Promise<void> {
+        await this.request(`/dca/schedules/${id}`, { method: 'DELETE' });
+    }
+
+    async toggleDCASchedule(id: string): Promise<DCASchedule> {
+        const res = await this.request<DCASchedule>(`/dca/schedules/${id}/toggle`, { method: 'POST' });
+        if (!res.data) throw new Error('切換定期定額計畫失敗');
+        return res.data;
+    }
+
+    async getPendingExecutions(): Promise<DCAExecution[]> {
+        const res = await this.request<DCAExecution[]>('/dca/executions/pending');
+        return res.data || [];
+    }
+
+    async getExecutionHistory(page = 1, pageSize = 20): Promise<PaginatedResponse<DCAExecution>> {
+        const res = await this.request<PaginatedResponse<DCAExecution>>(`/dca/executions/history?page=${page}&page_size=${pageSize}`);
+        if (!res.data) throw new Error('載入定期定額歷史失敗');
+        return res.data;
+    }
+
+    async confirmExecution(id: string, data?: DCAExecutionConfirm): Promise<DCAExecution> {
+        const res = await this.request<DCAExecution>(`/dca/executions/${id}/confirm`, { method: 'POST', body: JSON.stringify(data || {}) });
+        if (!res.data) throw new Error('確認定期定額執行失敗');
+        return res.data;
+    }
+
+    async skipExecution(id: string): Promise<DCAExecution> {
+        const res = await this.request<DCAExecution>(`/dca/executions/${id}/skip`, { method: 'POST' });
+        if (!res.data) throw new Error('跳過定期定額執行失敗');
+        return res.data;
+    }
+
+    async importDCACSV(
+        portfolioId: string,
+        file: File,
+        options: {
+            categoryId?: number;
+            brokerFormat?: string;
+            broker?: string;
+            autoConfirm?: boolean;
+        } = {}
+    ): Promise<DCAImportResult> {
+        const formData = new FormData();
+        formData.append('portfolio_id', portfolioId);
+        formData.append('category_id', String(options.categoryId ?? 1));
+        formData.append('broker_format', options.brokerFormat ?? 'standard');
+        formData.append('broker', options.broker ?? 'sinopac');
+        formData.append('auto_confirm', String(options.autoConfirm ?? false));
+        formData.append('file', file);
+
+        const token = this.getToken();
+        const headers: Record<string, string> = {};
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        const response = await fetch(`${this.baseUrl}/dca/import-csv`, {
+            method: 'POST',
+            headers,
+            body: formData,
+        });
+
+        if (response.status === 401) {
+            this.clearToken();
+            if (typeof window !== 'undefined') window.location.href = '/';
+            throw new Error('認證已過期，請重新登入');
+        }
+
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.detail || result.error || '匯入定期定額資料失敗');
+        }
+        if (!result.data) throw new Error('匯入定期定額資料失敗');
+        return result.data;
     }
 }
 

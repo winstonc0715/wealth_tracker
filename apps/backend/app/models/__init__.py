@@ -6,6 +6,7 @@ from app.models.portfolio import Portfolio
 from app.models.transaction import Transaction
 from app.models.position import CurrentPosition
 from app.models.net_worth import HistoricalNetWorth
+from app.models.dca import DCASchedule, DCAExecution
 
 __all__ = [
     "User",
@@ -14,4 +15,6 @@ __all__ = [
     "Transaction",
     "CurrentPosition",
     "HistoricalNetWorth",
+    "DCASchedule",
+    "DCAExecution",
 ]

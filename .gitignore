@@ -40,3 +40,4 @@ logs/
 
 # Expo
 .expo/
+.vercel

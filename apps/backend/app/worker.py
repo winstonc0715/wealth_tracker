@@ -16,11 +16,27 @@ from app.models.asset_category import AssetCategory
 from app.models.portfolio import Portfolio
 from app.price.manager import PriceManager
 from app.services.portfolio_service import PortfolioService
+from app.services.dca_service import DCAService
 
 logger = logging.getLogger(__name__)
 
 # 使用 AsyncIOScheduler
 scheduler = AsyncIOScheduler()
+
+
+async def execute_dca_schedules():
+    """
+    背景排程任務：每日 20:30 執行定期定額計畫
+    """
+    logger.info("開始執行定期定額排程...")
+    try:
+        async with async_session() as session:
+            service = DCAService(session)
+            result = await service.execute_pending_schedules()
+            await session.commit()
+            logger.info("定期定額排程執行完成: %s", result)
+    except Exception as e:
+        logger.error("定期定額排程執行失敗: %s", e)
 
 
 async def sync_all_prices():
@@ -111,6 +127,16 @@ def setup_worker():
         hours=1,
         id='record_all_portfolios_snapshot_job',
         replace_existing=True
+    )
+    # 每日 20:30 執行定期定額排程
+    scheduler.add_job(
+        execute_dca_schedules,
+        'cron',
+        hour=20,
+        minute=30,
+        id='execute_dca_schedules_job',
+        replace_existing=True,
+        timezone='Asia/Taipei',
     )
     scheduler.start()
     logger.info("✅ 背景報價同步器 (Background Worker) 已啟動")

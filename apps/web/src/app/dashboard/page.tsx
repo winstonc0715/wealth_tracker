@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { CalendarClock } from 'lucide-react';
 import apiClient, { SearchResult } from '@/lib/api-client';
 import type { PositionDetail } from '@/lib/api-client';
 import { usePortfolioStore } from '@/stores/portfolio-store';
@@ -325,6 +326,19 @@ export default function DashboardPage() {
                         }}
                     >
                         + 新增交易
+                    </button>
+                    <button
+                        className="btn-secondary"
+                        style={{
+                            padding: '8px 16px',
+                            fontSize: '0.85rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                        }}
+                        onClick={() => router.push('/dashboard/dca')}
+                    >
+                        <CalendarClock size={15} /> 定期定額
                     </button>
                     <button
                         className="btn-secondary"
