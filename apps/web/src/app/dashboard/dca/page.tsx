@@ -9,13 +9,17 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import apiClient, { SearchResult } from '@/lib/api-client';
-import type { DCASchedule, DCAScheduleInput, DCAExecution, DCAImportResult, PaginatedResponse } from '@/lib/api-client';
+import type {
+    DCASchedule, DCAScheduleInput, DCAExecution, DCAImportResult,
+    DCAImportColumnInfo, PaginatedResponse,
+} from '@/lib/api-client';
 import { usePortfolioStore } from '@/stores/portfolio-store';
 import {
     Calendar, Plus, Check, X, ArrowLeft, Pause, Play,
     Trash2, Edit2, TrendingUp, DollarSign, Clock,
     AlertCircle, CheckCircle2, XCircle, SkipForward,
     ChevronDown, ChevronUp, Search, Loader2, Upload,
+    Download, Eye, HelpCircle,
 } from 'lucide-react';
 
 // 扣款日選項
@@ -34,6 +38,14 @@ const CATEGORIES = [
     { id: 2, label: '美股', slug: 'us_stock' },
     { id: 3, label: '加密貨幣', slug: 'crypto' },
 ];
+
+// 匯入預覽動作標籤
+const IMPORT_ACTION_LABELS: Record<string, string> = {
+    create: '新增',
+    update: '更新',
+    unchanged: '不變',
+    none: '—',
+};
 
 export default function DCAPage() {
     const router = useRouter();
@@ -64,6 +76,10 @@ export default function DCAPage() {
     const [importLoading, setImportLoading] = useState(false);
     const [importError, setImportError] = useState('');
     const [importResult, setImportResult] = useState<DCAImportResult | null>(null);
+    const [importPreview, setImportPreview] = useState<DCAImportResult | null>(null);
+    const [previewLoading, setPreviewLoading] = useState(false);
+    const [importColumns, setImportColumns] = useState<DCAImportColumnInfo[]>([]);
+    const [showColumnHelp, setShowColumnHelp] = useState(false);
 
     // Modal 表單狀態
     const [formSymbol, setFormSymbol] = useState('');
@@ -139,6 +155,15 @@ export default function DCAPage() {
             return () => clearTimeout(t);
         }
     }, [successMsg]);
+
+    // 開啟匯入視窗時載入欄位對照（僅載入一次）
+    useEffect(() => {
+        if (showImportModal && importColumns.length === 0) {
+            apiClient.getDCAImportColumns()
+                .then(setImportColumns)
+                .catch(() => { /* 欄位提示載入失敗不阻擋匯入 */ });
+        }
+    }, [showImportModal, importColumns.length]);
 
     // === 操作方法 ===
 
@@ -227,6 +252,41 @@ export default function DCAPage() {
         setImportAutoConfirm(false);
         setImportError('');
         setImportResult(null);
+        setImportPreview(null);
+        setShowColumnHelp(false);
+    };
+
+    // 檔案或設定變更後，舊的預覽/結果不再有效
+    const invalidateImportPreview = () => {
+        setImportPreview(null);
+        setImportResult(null);
+        setImportError('');
+    };
+
+    const importOptions = () => ({
+        categoryId: importCategoryId,
+        brokerFormat: importBrokerFormat,
+        broker: importBroker,
+        autoConfirm: importAutoConfirm,
+    });
+
+    const handleImportPreview = async () => {
+        if (!selectedPortfolio) { setImportError('請先選擇投資組合'); return; }
+        if (!importFile) { setImportError('請選擇 CSV 檔案'); return; }
+
+        setPreviewLoading(true);
+        setImportError('');
+        setImportResult(null);
+        try {
+            const result = await apiClient.previewDCACSV(
+                selectedPortfolio.id, importFile, importOptions(),
+            );
+            setImportPreview(result);
+        } catch (err) {
+            setImportError((err as Error).message);
+        } finally {
+            setPreviewLoading(false);
+        }
     };
 
     const handleImportSubmit = async () => {
@@ -237,12 +297,10 @@ export default function DCAPage() {
         setImportError('');
         setImportResult(null);
         try {
-            const result = await apiClient.importDCACSV(selectedPortfolio.id, importFile, {
-                categoryId: importCategoryId,
-                brokerFormat: importBrokerFormat,
-                broker: importBroker,
-                autoConfirm: importAutoConfirm,
-            });
+            const result = await apiClient.importDCACSV(
+                selectedPortfolio.id, importFile, importOptions(),
+            );
+            setImportPreview(null);
             setImportResult(result);
             setSuccessMsg(`匯入完成：${result.imported} 筆成功，${result.skipped} 筆略過`);
             await fetchAll();
@@ -937,10 +995,77 @@ export default function DCAPage() {
                     <div className="card-glass" style={{
                         maxWidth: '540px', width: '95%', maxHeight: '90vh', overflowY: 'auto',
                     }} onClick={(e) => e.stopPropagation()}>
-                        <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <Upload size={20} style={{ color: 'var(--color-primary)' }} />
                             匯入定期定額資料
                         </h3>
+
+                        {/* 範本下載 + 欄位說明 */}
+                        <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                            <a
+                                href={apiClient.getDCATemplateUrl()}
+                                download="dca_import_template.csv"
+                                style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                    fontSize: '0.85rem', color: 'var(--color-primary)',
+                                    textDecoration: 'none',
+                                }}
+                            >
+                                <Download size={14} /> 下載 CSV 範本
+                            </a>
+                            <button
+                                type="button"
+                                onClick={() => setShowColumnHelp(!showColumnHelp)}
+                                style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                    fontSize: '0.85rem', color: 'var(--color-text-secondary)',
+                                    background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                                }}
+                            >
+                                <HelpCircle size={14} /> 支援欄位對照
+                                {showColumnHelp ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            </button>
+                        </div>
+
+                        {/* 欄位對照提示 */}
+                        {showColumnHelp && (
+                            <div style={{
+                                marginBottom: '16px', borderRadius: '10px',
+                                border: '1px solid var(--color-border)',
+                                background: 'var(--color-bg-secondary)',
+                                maxHeight: '220px', overflowY: 'auto',
+                            }}>
+                                {importColumns.length === 0 ? (
+                                    <div style={{ padding: '12px', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                        欄位對照載入中...
+                                    </div>
+                                ) : (
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                                        <thead>
+                                            <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
+                                                <th style={helpThStyle}>欄位</th>
+                                                <th style={helpThStyle}>可用名稱（別名）</th>
+                                                <th style={helpThStyle}>說明</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {importColumns.map(col => (
+                                                <tr key={col.key} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                                                    <td style={{ ...helpTdStyle, whiteSpace: 'nowrap', fontWeight: 600 }}>
+                                                        {col.label}
+                                                        {col.required && <span style={{ color: 'var(--color-loss)' }}> *</span>}
+                                                    </td>
+                                                    <td style={{ ...helpTdStyle, fontFamily: "'JetBrains Mono', monospace", fontSize: '0.72rem' }}>
+                                                        {col.aliases.join('、')}
+                                                    </td>
+                                                    <td style={helpTdStyle}>{col.description}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )}
+                            </div>
+                        )}
 
                         <div style={{ marginBottom: '16px' }}>
                             <label style={labelStyle}>CSV 檔案 *</label>
@@ -948,7 +1073,7 @@ export default function DCAPage() {
                                 className="input-field"
                                 type="file"
                                 accept=".csv,text/csv"
-                                onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                                onChange={(e) => { setImportFile(e.target.files?.[0] || null); invalidateImportPreview(); }}
                             />
                         </div>
 
@@ -958,7 +1083,7 @@ export default function DCAPage() {
                                 <select
                                     className="input-field"
                                     value={importBrokerFormat}
-                                    onChange={(e) => setImportBrokerFormat(e.target.value)}
+                                    onChange={(e) => { setImportBrokerFormat(e.target.value); invalidateImportPreview(); }}
                                 >
                                     <option value="standard">標準格式</option>
                                     <option value="sinopac">永豐格式</option>
@@ -969,7 +1094,7 @@ export default function DCAPage() {
                                 <select
                                     className="input-field"
                                     value={importBroker}
-                                    onChange={(e) => setImportBroker(e.target.value)}
+                                    onChange={(e) => { setImportBroker(e.target.value); invalidateImportPreview(); }}
                                 >
                                     {BROKERS.map(b => (
                                         <option key={b.key} value={b.key} disabled={!b.enabled}>
@@ -985,7 +1110,7 @@ export default function DCAPage() {
                             <select
                                 className="input-field"
                                 value={importCategoryId}
-                                onChange={(e) => setImportCategoryId(parseInt(e.target.value))}
+                                onChange={(e) => { setImportCategoryId(parseInt(e.target.value)); invalidateImportPreview(); }}
                             >
                                 {CATEGORIES.map(c => (
                                     <option key={c.id} value={c.id}>{c.label}</option>
@@ -999,7 +1124,7 @@ export default function DCAPage() {
                         }}>
                             <button
                                 type="button"
-                                onClick={() => setImportAutoConfirm(!importAutoConfirm)}
+                                onClick={() => { setImportAutoConfirm(!importAutoConfirm); invalidateImportPreview(); }}
                                 style={{
                                     width: '20px', height: '20px', borderRadius: '4px',
                                     border: `2px solid ${importAutoConfirm ? 'var(--color-primary)' : 'var(--color-border)'}`,
@@ -1029,6 +1154,93 @@ export default function DCAPage() {
                             </div>
                         )}
 
+                        {/* 匯入預覽（dry-run）結果 */}
+                        {importPreview && !importResult && (
+                            <div style={{
+                                padding: '12px 14px', borderRadius: '10px', marginBottom: '14px',
+                                background: 'var(--color-bg-secondary)', border: '1px solid var(--color-primary)',
+                                fontSize: '0.85rem', color: 'var(--color-text-secondary)',
+                            }}>
+                                <div style={{
+                                    fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: '8px',
+                                    display: 'flex', alignItems: 'center', gap: '6px',
+                                }}>
+                                    <Eye size={14} style={{ color: 'var(--color-primary)' }} />
+                                    匯入預覽（尚未寫入資料）
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 12px', marginBottom: '10px' }}>
+                                    <span>可匯入 {importPreview.imported} 筆</span>
+                                    <span style={{ color: importPreview.skipped > 0 ? 'var(--color-loss)' : undefined }}>
+                                        有問題 {importPreview.skipped} 筆
+                                    </span>
+                                    <span>計畫新增 {importPreview.schedules_created} 筆</span>
+                                    <span>計畫更新 {importPreview.schedules_updated} 筆</span>
+                                    <span>執行新增 {importPreview.executions_created} 筆</span>
+                                    <span>執行更新 {importPreview.executions_updated} 筆</span>
+                                    <span>交易新增 {importPreview.transactions_created} 筆</span>
+                                    <span>交易更新 {importPreview.transactions_updated} 筆</span>
+                                </div>
+
+                                {(importPreview.details?.length ?? 0) > 0 && (
+                                    <div style={{
+                                        maxHeight: '200px', overflowY: 'auto',
+                                        border: '1px solid var(--color-border)', borderRadius: '8px',
+                                        marginBottom: importPreview.errors.length > 0 ? '10px' : 0,
+                                    }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                                            <thead>
+                                                <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
+                                                    <th style={helpThStyle}>列</th>
+                                                    <th style={helpThStyle}>標的</th>
+                                                    <th style={helpThStyle}>日期</th>
+                                                    <th style={helpThStyle}>股數</th>
+                                                    <th style={helpThStyle}>總額</th>
+                                                    <th style={helpThStyle}>計畫</th>
+                                                    <th style={helpThStyle}>執行</th>
+                                                    <th style={helpThStyle}>交易</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {importPreview.details!.map((d) => (
+                                                    <tr key={d.row} style={{
+                                                        borderBottom: '1px solid var(--color-border)',
+                                                        color: d.status === 'error' ? 'var(--color-loss)' : undefined,
+                                                    }}>
+                                                        <td style={helpTdStyle}>{d.row}</td>
+                                                        <td style={{ ...helpTdStyle, fontWeight: 600 }}>{d.symbol || '-'}</td>
+                                                        <td style={{ ...helpTdStyle, whiteSpace: 'nowrap' }}>{d.execution_date || '-'}</td>
+                                                        <td style={helpTdStyle}>{d.quantity ?? '-'}</td>
+                                                        <td style={helpTdStyle}>{d.total_cost ?? '-'}</td>
+                                                        {d.status === 'error' ? (
+                                                            <td style={helpTdStyle} colSpan={3}>{d.error || '匯入失敗'}</td>
+                                                        ) : (
+                                                            <>
+                                                                <td style={helpTdStyle}>{IMPORT_ACTION_LABELS[d.schedule_action] || d.schedule_action}</td>
+                                                                <td style={helpTdStyle}>{IMPORT_ACTION_LABELS[d.execution_action] || d.execution_action}</td>
+                                                                <td style={helpTdStyle}>{IMPORT_ACTION_LABELS[d.transaction_action] || d.transaction_action}</td>
+                                                            </>
+                                                        )}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+
+                                {importPreview.errors.length > 0 && (
+                                    <div style={{
+                                        color: 'var(--color-loss)', maxHeight: '120px', overflowY: 'auto',
+                                        display: 'flex', flexDirection: 'column', gap: '2px',
+                                    }}>
+                                        <div style={{ fontWeight: 600 }}>錯誤明細（{importPreview.errors.length} 筆）</div>
+                                        {importPreview.errors.map((item, idx) => (
+                                            <div key={idx}>{item}</div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {importResult && (
                             <div style={{
                                 padding: '12px 14px', borderRadius: '10px', marginBottom: '14px',
@@ -1049,8 +1261,13 @@ export default function DCAPage() {
                                     <span>交易更新 {importResult.transactions_updated} 筆</span>
                                 </div>
                                 {importResult.errors.length > 0 && (
-                                    <div style={{ marginTop: '10px', color: 'var(--color-loss)' }}>
-                                        {importResult.errors.slice(0, 3).map((item, idx) => (
+                                    <div style={{
+                                        marginTop: '10px', color: 'var(--color-loss)',
+                                        maxHeight: '120px', overflowY: 'auto',
+                                        display: 'flex', flexDirection: 'column', gap: '2px',
+                                    }}>
+                                        <div style={{ fontWeight: 600 }}>錯誤明細（{importResult.errors.length} 筆）</div>
+                                        {importResult.errors.map((item, idx) => (
                                             <div key={idx}>{item}</div>
                                         ))}
                                     </div>
@@ -1063,15 +1280,31 @@ export default function DCAPage() {
                                 關閉
                             </button>
                             <button
+                                className="btn-secondary"
+                                onClick={handleImportPreview}
+                                disabled={previewLoading || importLoading || !importFile}
+                                style={{
+                                    opacity: (previewLoading || importLoading || !importFile) ? 0.6 : 1,
+                                    minWidth: '96px',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                                }}
+                            >
+                                {previewLoading ? (
+                                    <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                                ) : (
+                                    <><Eye size={16} /> 預覽</>
+                                )}
+                            </button>
+                            <button
                                 className="btn-primary"
                                 onClick={handleImportSubmit}
-                                disabled={importLoading}
-                                style={{ opacity: importLoading ? 0.6 : 1, minWidth: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                                disabled={importLoading || previewLoading}
+                                style={{ opacity: (importLoading || previewLoading) ? 0.6 : 1, minWidth: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                             >
                                 {importLoading ? (
                                     <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
                                 ) : (
-                                    <><Upload size={16} /> 開始匯入</>
+                                    <><Upload size={16} /> {importPreview ? '確認匯入' : '開始匯入'}</>
                                 )}
                             </button>
                         </div>
@@ -1411,6 +1644,23 @@ const tdStyle: React.CSSProperties = {
     padding: '14px 16px',
     fontSize: '0.9rem',
     whiteSpace: 'nowrap',
+};
+
+const helpThStyle: React.CSSProperties = {
+    padding: '8px 10px',
+    textAlign: 'left',
+    color: 'var(--color-text-muted)',
+    fontWeight: 600,
+    whiteSpace: 'nowrap',
+    position: 'sticky',
+    top: 0,
+    background: 'var(--color-bg-secondary)',
+};
+
+const helpTdStyle: React.CSSProperties = {
+    padding: '7px 10px',
+    verticalAlign: 'top',
+    color: 'var(--color-text-secondary)',
 };
 
 const iconBtnStyle: React.CSSProperties = {

@@ -124,6 +124,10 @@ class DCABatchConfirmResult(BaseModel):
 
 class DCAImportRecord(BaseModel):
     """單筆匯入後的定期定額扣款紀錄"""
+    source_row: int | None = Field(
+        default=None,
+        description="來源 CSV 列號（含標題列，資料列從 2 起算）",
+    )
     execution_date: date
     symbol: str = Field(max_length=20)
     asset_name: str | None = Field(default=None, max_length=100)
@@ -159,6 +163,32 @@ class DCAImportRecord(BaseModel):
         return self
 
 
+class DCAImportRowDetail(BaseModel):
+    """單列匯入（或預覽）結果明細"""
+    row: int
+    symbol: str | None = None
+    asset_name: str | None = None
+    broker: str | None = None
+    execution_date: date | None = None
+    actual_price: Decimal | None = None
+    quantity: Decimal | None = None
+    total_cost: Decimal | None = None
+    status: str = "ok"  # ok / error
+    schedule_action: str = "none"  # create / update / unchanged / none
+    execution_action: str = "none"  # create / update / none
+    transaction_action: str = "none"  # create / update / none
+    error: str | None = None
+
+
+class DCAImportColumnInfo(BaseModel):
+    """匯入 CSV 支援欄位與別名對照"""
+    key: str
+    label: str
+    required: bool
+    aliases: list[str]
+    description: str
+
+
 class DCAImportResult(BaseModel):
     """定期定額匯入結果"""
     total_rows: int
@@ -171,3 +201,5 @@ class DCAImportResult(BaseModel):
     transactions_created: int
     transactions_updated: int
     errors: list[str]
+    dry_run: bool = False
+    details: list[DCAImportRowDetail] = Field(default_factory=list)

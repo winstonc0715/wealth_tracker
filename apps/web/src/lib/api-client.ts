@@ -102,6 +102,30 @@ export interface DCAExecutionConfirm {
     note?: string;
 }
 
+export interface DCAImportRowDetail {
+    row: number;
+    symbol: string | null;
+    asset_name: string | null;
+    broker: string | null;
+    execution_date: string | null;
+    actual_price: number | null;
+    quantity: number | null;
+    total_cost: number | null;
+    status: 'ok' | 'error';
+    schedule_action: 'create' | 'update' | 'unchanged' | 'none';
+    execution_action: 'create' | 'update' | 'none';
+    transaction_action: 'create' | 'update' | 'none';
+    error: string | null;
+}
+
+export interface DCAImportColumnInfo {
+    key: string;
+    label: string;
+    required: boolean;
+    aliases: string[];
+    description: string;
+}
+
 export interface DCAImportResult {
     total_rows: number;
     imported: number;
@@ -113,6 +137,8 @@ export interface DCAImportResult {
     transactions_created: number;
     transactions_updated: number;
     errors: string[];
+    dry_run?: boolean;
+    details?: DCAImportRowDetail[];
 }
 
 class ApiClient {
@@ -356,7 +382,8 @@ class ApiClient {
         return res.data;
     }
 
-    async importDCACSV(
+    private async uploadDCACSV(
+        path: string,
         portfolioId: string,
         file: File,
         options: {
@@ -364,7 +391,8 @@ class ApiClient {
             brokerFormat?: string;
             broker?: string;
             autoConfirm?: boolean;
-        } = {}
+        } = {},
+        failMessage = '匯入定期定額資料失敗'
     ): Promise<DCAImportResult> {
         const formData = new FormData();
         formData.append('portfolio_id', portfolioId);
@@ -380,7 +408,7 @@ class ApiClient {
             headers['Authorization'] = `Bearer ${token}`;
         }
 
-        const response = await fetch(`${this.baseUrl}/dca/import-csv`, {
+        const response = await fetch(`${this.baseUrl}${path}`, {
             method: 'POST',
             headers,
             body: formData,
@@ -394,10 +422,51 @@ class ApiClient {
 
         const result = await response.json();
         if (!response.ok) {
-            throw new Error(result.detail || result.error || '匯入定期定額資料失敗');
+            throw new Error(result.detail || result.error || failMessage);
         }
-        if (!result.data) throw new Error('匯入定期定額資料失敗');
+        if (!result.data) throw new Error(failMessage);
         return result.data;
+    }
+
+    async importDCACSV(
+        portfolioId: string,
+        file: File,
+        options: {
+            categoryId?: number;
+            brokerFormat?: string;
+            broker?: string;
+            autoConfirm?: boolean;
+        } = {}
+    ): Promise<DCAImportResult> {
+        return this.uploadDCACSV('/dca/import-csv', portfolioId, file, options);
+    }
+
+    /** 匯入預覽（dry-run）：試算結果但不寫入任何資料 */
+    async previewDCACSV(
+        portfolioId: string,
+        file: File,
+        options: {
+            categoryId?: number;
+            brokerFormat?: string;
+            broker?: string;
+            autoConfirm?: boolean;
+        } = {}
+    ): Promise<DCAImportResult> {
+        return this.uploadDCACSV(
+            '/dca/import-csv/preview', portfolioId, file, options,
+            '預覽定期定額匯入失敗'
+        );
+    }
+
+    /** 取得匯入 CSV 支援欄位與別名對照 */
+    async getDCAImportColumns(): Promise<DCAImportColumnInfo[]> {
+        const res = await this.request<DCAImportColumnInfo[]>('/dca/import-columns');
+        return res.data || [];
+    }
+
+    /** 匯入範本 CSV 下載網址（無需登入） */
+    getDCATemplateUrl(): string {
+        return `${this.baseUrl}/dca/import-template`;
     }
 }
 

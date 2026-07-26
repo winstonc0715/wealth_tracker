@@ -24,6 +24,7 @@ from app.schemas.dca import (
     DCAExecutionConfirm,
     DCAImportRecord,
     DCAImportResult,
+    DCAImportRowDetail,
 )
 from app.schemas.transaction import TransactionCreate, TransactionUpdate
 from app.services.transaction_service import TransactionService
@@ -277,6 +278,7 @@ class DCAService:
         records: list[DCAImportRecord],
         default_broker: str = "sinopac",
         auto_confirm: bool = False,
+        collect_details: bool = False,
     ) -> DCAImportResult:
         """
         匯入定期定額扣款資料並支援重複匯入更新。
@@ -284,6 +286,9 @@ class DCAService:
         同一使用者、投資組合、券商、標的會共用同一個計畫；同一計畫
         與同一天執行紀錄再次匯入時會更新原紀錄。若已建立交易紀錄，
         後續匯入會同步更新交易，避免重複入帳。
+
+        collect_details=True 時會回傳逐列處理明細（供匯入預覽使用）；
+        搭配呼叫端 rollback 即可做到 dry-run 試算。
         """
         portfolio = await self.db.get(Portfolio, portfolio_id)
         if not portfolio or portfolio.user_id != user_id:
@@ -302,10 +307,21 @@ class DCAService:
             "errors": [],
         }
         schedule_cache: dict[tuple[str, str, str], DCASchedule] = {}
+        details: list[DCAImportRowDetail] = []
 
-        for row_num, record in enumerate(records, start=2):
+        for index, record in enumerate(records, start=2):
+            row_num = record.source_row or index
             row_stats = self._empty_import_stats(total_rows=0)
             row_cache = schedule_cache.copy()
+            detail: DCAImportRowDetail | None = None
+            if collect_details:
+                detail = DCAImportRowDetail(
+                    row=row_num,
+                    symbol=record.symbol,
+                    asset_name=record.asset_name,
+                    broker=record.broker or default_broker,
+                    execution_date=record.execution_date,
+                )
             try:
                 # 每列使用 SAVEPOINT，避免單列失敗後留下半套 schedule/execution。
                 async with self.db.begin_nested():
@@ -350,14 +366,42 @@ class DCAService:
                 self._merge_import_stats(stats, row_stats)
                 schedule_cache.update(row_cache)
                 stats["imported"] += 1
+
+                if detail is not None:
+                    detail.status = "ok"
+                    detail.actual_price = execution.actual_price
+                    detail.quantity = execution.quantity
+                    detail.total_cost = execution.total_cost
+                    if row_stats["schedules_created"]:
+                        detail.schedule_action = "create"
+                    elif row_stats["schedules_updated"]:
+                        detail.schedule_action = "update"
+                    else:
+                        detail.schedule_action = "unchanged"
+                    detail.execution_action = (
+                        "create" if row_stats["executions_created"] else "update"
+                    )
+                    if row_stats["transactions_created"]:
+                        detail.transaction_action = "create"
+                    elif row_stats["transactions_updated"]:
+                        detail.transaction_action = "update"
+                    else:
+                        detail.transaction_action = "none"
+                    details.append(detail)
             except Exception as e:
                 stats["skipped"] += 1
                 error_msg = f"第 {row_num} 行匯入失敗: {e}"
                 stats["errors"].append(error_msg)
                 logger.warning(error_msg)
+                if detail is not None:
+                    detail.status = "error"
+                    detail.error = str(e)
+                    details.append(detail)
 
         await self.db.flush()
-        return DCAImportResult(**stats)
+        result = DCAImportResult(**stats)
+        result.details = details
+        return result
 
     @staticmethod
     def _empty_import_stats(total_rows: int) -> dict:

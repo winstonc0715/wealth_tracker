@@ -13,7 +13,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from app.models.dca import ExecutionStatus, InvestmentType
-from app.schemas.dca import DCAImportRecord
+from app.schemas.dca import DCAImportColumnInfo, DCAImportRecord
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +68,95 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
 }
 
 
+# 欄位中文名稱、是否必填、說明（供前端提示與 API 文件使用）
+FIELD_INFO: dict[str, tuple[str, bool, str]] = {
+    "execution_date": (
+        "扣款/成交日期", True,
+        "支援 2026-05-03、2026/05/03、20260503 與民國年 115/05/03。",
+    ),
+    "symbol": ("標的代碼", True, "股票或 ETF 代碼，例如 2330、0050、AAPL。"),
+    "asset_name": ("標的名稱", False, "例如 台積電；用於顯示，可留空。"),
+    "investment_type": (
+        "投資方式", False,
+        "amount（定額）或 shares（定股），也接受中文「定期定額 / 定期定股」；未填預設定額。",
+    ),
+    "target_amount": (
+        "每次投資金額", False,
+        "定額模式的每次設定金額；未填時以扣款金額推導。",
+    ),
+    "target_shares": (
+        "每次投資股數", False,
+        "定股模式的每次設定股數；未填時以成交股數推導。",
+    ),
+    "execution_days": (
+        "每月扣款日", False,
+        "多個日期以逗號分隔（例如 3,16）；未填時以成交日期的「日」推導。",
+    ),
+    "actual_price": ("成交價格", False, "單股成交價；與股數擇一提供即可推導其餘欄位。"),
+    "quantity": ("成交股數", False, "此次實際成交的股數。"),
+    "fee": ("手續費", False, "未填視為 0。"),
+    "total_cost": ("總扣款金額", False, "含手續費的總金額；未填時自動計算。"),
+    "currency": ("幣別", False, "未填預設 TWD。"),
+    "status": (
+        "狀態", False,
+        "pending / confirmed / skipped / failed，或中文「待確認、已確認、已入帳、已跳過、失敗」；"
+        "confirmed（已入帳）會建立或更新對應交易。",
+    ),
+    "note": ("備註", False, "自由文字，會寫入執行紀錄與交易備註。"),
+    "broker": ("券商", False, "未填時使用匯入設定中選擇的券商。"),
+}
+
+
+def get_import_column_info() -> list[DCAImportColumnInfo]:
+    """取得匯入 CSV 支援欄位、別名與說明（單一資料來源：FIELD_ALIASES）。"""
+    columns: list[DCAImportColumnInfo] = []
+    for key, aliases in FIELD_ALIASES.items():
+        label, required, description = FIELD_INFO.get(key, (key, False, ""))
+        columns.append(
+            DCAImportColumnInfo(
+                key=key,
+                label=label,
+                required=required,
+                aliases=list(aliases),
+                description=description,
+            )
+        )
+    return columns
+
+
+# CSV 範本：標準格式欄位 + 兩列範例資料
+TEMPLATE_HEADERS: tuple[str, ...] = (
+    "execution_date", "symbol", "asset_name", "investment_type",
+    "target_amount", "target_shares", "execution_days",
+    "actual_price", "quantity", "fee", "total_cost",
+    "currency", "status", "note",
+)
+
+TEMPLATE_ROWS: tuple[tuple[str, ...], ...] = (
+    (
+        "2026-07-03", "2330", "台積電", "amount",
+        "3000", "", "3,16",
+        "1050", "2", "1", "2101",
+        "TWD", "confirmed", "永豐定期定額",
+    ),
+    (
+        "2026-07-16", "0050", "元大台灣50", "amount",
+        "2000", "", "3,16",
+        "203.5", "9", "1", "1832.5",
+        "TWD", "pending", "",
+    ),
+)
+
+
+def build_template_csv() -> str:
+    """產生匯入範本 CSV 內容（標準格式）。"""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\n")
+    writer.writerow(TEMPLATE_HEADERS)
+    writer.writerows(TEMPLATE_ROWS)
+    return buffer.getvalue()
+
+
 class DCACSVParser:
     """定期定額 CSV 解析器"""
 
@@ -91,7 +180,9 @@ class DCACSVParser:
         for row_num, raw_row in enumerate(reader, start=2):
             row = self._normalize_row(raw_row)
             try:
-                records.append(self._parse_row(row))
+                record = self._parse_row(row)
+                record.source_row = row_num
+                records.append(record)
             except Exception as e:
                 errors.append(f"第 {row_num} 行: {e}")
                 logger.warning("DCA CSV 解析第 %d 行失敗: %s", row_num, e)

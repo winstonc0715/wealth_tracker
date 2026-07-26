@@ -7,7 +7,9 @@
 import logging
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import (
+    APIRouter, Depends, File, Form, HTTPException, Response, UploadFile,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -22,9 +24,15 @@ from app.schemas.dca import (
     DCAScheduleResponse,
     DCAExecutionResponse,
     DCAExecutionConfirm,
+    DCAImportColumnInfo,
+    DCAImportRecord,
     DCAImportResult,
 )
-from app.broker.dca_csv_parser import DCACSVParser
+from app.broker.dca_csv_parser import (
+    DCACSVParser,
+    build_template_csv,
+    get_import_column_info,
+)
 from app.services.dca_service import DCAService
 
 logger = logging.getLogger(__name__)
@@ -315,7 +323,121 @@ async def skip_execution(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-# ==================== 管理 / 除錯端點 ====================
+# ==================== 匯入端點 ====================
+
+
+async def _load_dca_csv_records(
+    file: UploadFile,
+    broker_format: str,
+    broker: str,
+) -> tuple[list[DCAImportRecord], list[str]]:
+    """讀取並解析上傳的 DCA CSV，回傳 (紀錄, 解析錯誤)。"""
+    content = await file.read()
+    try:
+        csv_text = content.decode("utf-8-sig")
+    except UnicodeDecodeError as e:
+        raise HTTPException(status_code=400, detail="CSV 必須使用 UTF-8 編碼") from e
+
+    try:
+        parser = DCACSVParser(broker_format=broker_format, broker=broker)
+        return parser.parse(csv_text)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+def _merge_parse_errors(
+    result: DCAImportResult, parse_errors: list[str],
+) -> None:
+    """把解析階段的錯誤併入匯入結果統計。"""
+    if not parse_errors:
+        return
+    result.total_rows += len(parse_errors)
+    result.skipped += len(parse_errors)
+    result.errors = parse_errors + result.errors
+
+
+@dca_router.get(
+    "/import-template",
+    response_class=Response,
+)
+async def download_import_template():
+    """下載定期定額匯入 CSV 範本（標準格式，UTF-8 含 BOM）。"""
+    csv_text = build_template_csv()
+    return Response(
+        content="\ufeff" + csv_text,
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition":
+                'attachment; filename="dca_import_template.csv"',
+        },
+    )
+
+
+@dca_router.get(
+    "/import-columns",
+    response_model=ApiResponse[list[DCAImportColumnInfo]],
+)
+async def get_import_columns():
+    """取得匯入 CSV 支援的欄位、必填狀態與欄位名稱別名對照。"""
+    return ApiResponse(data=get_import_column_info())
+
+
+@dca_router.post(
+    "/import-csv/preview",
+    response_model=ApiResponse[DCAImportResult],
+)
+async def preview_dca_csv(
+    portfolio_id: str = Form(...),
+    category_id: int = Form(1),
+    broker_format: str = Form("standard"),
+    broker: str = Form("sinopac"),
+    auto_confirm: bool = Form(False),
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    匯入預覽（dry-run）。
+
+    以與正式匯入完全相同的邏輯試算，回傳逐列明細與統計後
+    rollback，不會寫入任何資料。
+    """
+    portfolio = await db.get(Portfolio, portfolio_id)
+    if not portfolio or portfolio.user_id != user.id:
+        raise HTTPException(status_code=404, detail="投資組合不存在")
+
+    records, parse_errors = await _load_dca_csv_records(
+        file, broker_format, broker,
+    )
+
+    service = DCAService(db)
+    try:
+        result = await service.import_records(
+            user_id=user.id,
+            portfolio_id=portfolio_id,
+            category_id=category_id,
+            records=records,
+            default_broker=broker,
+            auto_confirm=auto_confirm,
+            collect_details=True,
+        )
+    except Exception as e:
+        await db.rollback()
+        logger.exception("定期定額匯入預覽失敗")
+        raise HTTPException(status_code=500, detail=f"預覽失敗: {str(e)}")
+
+    # dry-run：無論結果如何都不落地
+    await db.rollback()
+
+    result.dry_run = True
+    _merge_parse_errors(result, parse_errors)
+    return ApiResponse(
+        data=result,
+        message=(
+            f"預覽完成（未寫入資料）：{result.imported} 筆可匯入，"
+            f"{result.skipped} 筆有問題"
+        ),
+    )
 
 
 @dca_router.post(
@@ -342,17 +464,9 @@ async def import_dca_csv(
     if not portfolio or portfolio.user_id != user.id:
         raise HTTPException(status_code=404, detail="投資組合不存在")
 
-    content = await file.read()
-    try:
-        csv_text = content.decode("utf-8-sig")
-    except UnicodeDecodeError as e:
-        raise HTTPException(status_code=400, detail="CSV 必須使用 UTF-8 編碼") from e
-
-    try:
-        parser = DCACSVParser(broker_format=broker_format, broker=broker)
-        records, parse_errors = parser.parse(csv_text)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    records, parse_errors = await _load_dca_csv_records(
+        file, broker_format, broker,
+    )
 
     service = DCAService(db)
     try:
@@ -364,10 +478,7 @@ async def import_dca_csv(
             default_broker=broker,
             auto_confirm=auto_confirm,
         )
-        if parse_errors:
-            result.total_rows += len(parse_errors)
-            result.skipped += len(parse_errors)
-            result.errors = parse_errors + result.errors
+        _merge_parse_errors(result, parse_errors)
         await db.commit()
         return ApiResponse(
             data=result,
