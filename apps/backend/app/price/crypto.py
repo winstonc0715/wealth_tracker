@@ -63,10 +63,15 @@ class CryptoProvider(PriceProvider):
     def _get_coin_id(self, symbol: str) -> str:
         """將 symbol 轉換為 CoinGecko coin ID"""
         symbol_upper = symbol.upper()
+        # 支援 Yahoo 風格代號（ETH-USD、BTC-USDT → ETH、BTC）
+        for suffix in ("-USD", "-USDT", "-TWD"):
+            if symbol_upper.endswith(suffix):
+                symbol_upper = symbol_upper[: -len(suffix)]
+                break
         coin_id = SYMBOL_TO_COINGECKO_ID.get(symbol_upper)
         if not coin_id:
             # 嘗試直接使用小寫 symbol
-            return symbol.lower()
+            return symbol_upper.lower()
         return coin_id
 
     async def get_current_price(self, symbol: str) -> PriceData:

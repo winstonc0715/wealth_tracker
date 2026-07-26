@@ -161,8 +161,9 @@ export default function TransactionsPage() {
                     </div>
                 </div>
 
-                <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                {/* overflowX: auto — 窄視窗時表格可橫向捲動，「操作」欄不再被裁掉 */}
+                <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '720px' }}>
                         <thead style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid var(--color-border)' }}>
                             <tr>
                                 <th style={thStyle}>日期</th>

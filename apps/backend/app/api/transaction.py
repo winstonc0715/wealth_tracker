@@ -51,6 +51,21 @@ async def create_transaction(
         await db.commit()
         await db.refresh(tx)
 
+        # 背景預熱新標的報價：新增後立即刷新頁面時，
+        # 持倉明細不用等背景同步（最長 5 分鐘）才有價格
+        category_slug = tx.category.slug if tx.category else None
+        if category_slug and category_slug not in ("fiat", "liability"):
+            import asyncio as _asyncio
+            from app.price.manager import get_price_manager
+
+            async def _warm_price(symbol: str, slug: str):
+                try:
+                    await get_price_manager().get_price(symbol, slug)
+                except Exception:
+                    pass  # 預熱失敗不影響主流程
+
+            _asyncio.create_task(_warm_price(tx.symbol, category_slug))
+
         return ApiResponse(
             data=TransactionResponse(
                 id=tx.id,

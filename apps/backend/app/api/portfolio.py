@@ -246,8 +246,8 @@ async def get_portfolio_history(
     if not portfolio or portfolio.user_id != user.id:
         raise HTTPException(status_code=404, detail="投資組合不存在")
 
-    if force_refresh and user.email not in settings.admin_email_list:
-        raise HTTPException(status_code=403, detail="無強制更新權限")
+    # force_refresh 開放給組合擁有者：清除自家快照重算是正當操作
+    # （擁有者檢查已在上方完成）
 
     service = _get_portfolio_service(db)
     try:
