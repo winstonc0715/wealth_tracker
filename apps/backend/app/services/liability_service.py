@@ -11,7 +11,7 @@ import logging
 import uuid
 from calendar import monthrange
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +20,7 @@ from sqlalchemy.orm import selectinload
 from app.models.asset_category import AssetCategory
 from app.models.liability import Liability, LiabilityPayment, PaymentCycle
 from app.models.position import CurrentPosition
-from app.models.transaction import TransactionType
+from app.models.transaction import Transaction, TransactionType
 from app.schemas.liability import (
     LiabilityCreate, LiabilityUpdate, PaymentCreate,
     LiabilityResponse, PaymentResponse, BackfillPreview,
@@ -269,24 +269,73 @@ class LiabilityService:
         as_of = as_of or date.today()
         expected = _expected_periods(liability, as_of)
         paid = len(liability.payments)
+        if expected <= paid:
+            return 0
+
+        # 批量寫入：查詢次數與期數無關，避免逐期 round-trip 造成線上逾時
+        position = await self._get_position(
+            liability.portfolio_id, liability.symbol
+        )
+        remaining = position.total_quantity if position else Decimal("0")
+        if remaining < 0:
+            remaining = Decimal("0")
+        category_id = await self._liability_category_id()
 
         created = 0
+        first_date: date | None = None
         for i in range(paid, expected):
-            position = await self._get_position(
-                liability.portfolio_id, liability.symbol
-            )
-            remaining = position.total_quantity if position else Decimal("0")
             amount = min(liability.payment_amount, remaining)
             if amount <= 0:
                 break
-            await self.record_payment(user_id, liability.id, PaymentCreate(
+            pay_date = _due_date(liability, i)
+            note = f"自動補登第 {i + 1} 期"
+            tx = Transaction(
+                id=str(uuid.uuid4()),
+                portfolio_id=liability.portfolio_id,
+                category_id=category_id,
+                symbol=liability.symbol,
+                asset_name=liability.name,
+                tx_type=TransactionType.WITHDRAW,
+                quantity=amount,
+                unit_price=Decimal("1"),
+                fee=Decimal("0"),
+                currency=liability.currency,
+                executed_at=datetime.combine(
+                    pay_date, datetime.min.time(), tzinfo=timezone.utc
+                ),
+                note=f"還款「{liability.name}」（{note}）",
+            )
+            if position:
+                # 與 TransactionService._update_position 的 WITHDRAW 邏輯一致
+                realized = (tx.unit_price - position.avg_cost) * amount
+                tx.realized_pnl = realized.quantize(
+                    Decimal("0.0001"), rounding=ROUND_HALF_UP
+                )
+                position.total_quantity -= amount
+            self.db.add(tx)
+            self.db.add(LiabilityPayment(
+                liability_id=liability.id,
+                payment_date=pay_date,
                 amount=amount,
-                payment_date=_due_date(liability, i),
-                note=f"自動補登第 {i + 1} 期",
+                transaction_id=tx.id,
+                note=note,
             ))
+            remaining -= amount
+            first_date = first_date or pay_date
             created += 1
 
         if created:
+            await self.db.flush()
+            # 走勢圖快照自最早補登日起失效、重算（單次批次刪除）
+            tx_service = TransactionService(self.db)
+            await tx_service._invalidate_snapshots(
+                liability.portfolio_id, first_date
+            )
+            if remaining <= 0:
+                liability.is_active = False
+                logger.info(
+                    "負債「%s」餘額歸零，自動標記結清", liability.name
+                )
             logger.info(
                 "負債「%s」自動補登 %d 期還款", liability.name, created
             )
