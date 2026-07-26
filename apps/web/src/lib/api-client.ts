@@ -44,6 +44,52 @@ export interface SearchResult {
 }
 
 // === 定期定額 (DCA) 介面 ===
+export interface LiabilityPayment {
+    id: string;
+    payment_date: string;
+    amount: number;
+    transaction_id: string | null;
+    note: string | null;
+    created_at?: string;
+}
+
+export interface Liability {
+    id: string;
+    portfolio_id: string;
+    symbol: string;
+    name: string;
+    principal: number;
+    payment_cycle: 'weekly' | 'biweekly' | 'monthly' | 'quarterly';
+    total_periods: number;
+    payment_amount: number;
+    payment_day: number | null;
+    start_date: string | null;
+    currency: string;
+    note: string | null;
+    is_active: boolean;
+    created_at?: string;
+    outstanding_balance: number;
+    paid_amount: number;
+    paid_periods: number;
+    progress_pct: number;
+    next_payment_date: string | null;
+    payments: LiabilityPayment[];
+}
+
+export interface LiabilityInput {
+    portfolio_id: string;
+    name: string;
+    principal: number;
+    payment_cycle?: 'weekly' | 'biweekly' | 'monthly' | 'quarterly';
+    total_periods: number;
+    payment_amount: number;
+    payment_day?: number;
+    start_date?: string;
+    currency?: string;
+    note?: string;
+    existing_symbol?: string;
+}
+
 export interface DCASchedule {
     id: string;
     user_id: string;
@@ -346,6 +392,44 @@ class ApiClient {
             body: formData,
         });
         return response.json();
+    }
+
+    // === 負債管理 ===
+    async getLiabilities(portfolioId: string): Promise<Liability[]> {
+        const res = await this.request<Liability[]>(`/liabilities/${portfolioId}`);
+        return res.data || [];
+    }
+
+    async createLiability(data: LiabilityInput): Promise<Liability> {
+        const res = await this.request<Liability>('/liabilities/', { method: 'POST', body: JSON.stringify(data) });
+        if (!res.data) throw new Error('建立負債失敗');
+        return res.data;
+    }
+
+    async updateLiability(id: string, data: Partial<LiabilityInput> & { is_active?: boolean }): Promise<Liability> {
+        const res = await this.request<Liability>(`/liabilities/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+        if (!res.data) throw new Error('更新負債失敗');
+        return res.data;
+    }
+
+    async deleteLiability(id: string): Promise<void> {
+        await this.request(`/liabilities/${id}`, { method: 'DELETE' });
+    }
+
+    async recordLiabilityPayment(
+        liabilityId: string,
+        data: { amount: number; payment_date?: string; note?: string },
+    ): Promise<LiabilityPayment> {
+        const res = await this.request<LiabilityPayment>(
+            `/liabilities/${liabilityId}/payments`,
+            { method: 'POST', body: JSON.stringify(data) },
+        );
+        if (!res.data) throw new Error('記錄還款失敗');
+        return res.data;
+    }
+
+    async deleteLiabilityPayment(liabilityId: string, paymentId: string): Promise<void> {
+        await this.request(`/liabilities/${liabilityId}/payments/${paymentId}`, { method: 'DELETE' });
     }
 
     // === 定期定額 (DCA) ===

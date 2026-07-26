@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.realpath(os.path.join(os.path.dirname(__file__), '..'
 from app.config import get_settings
 from app.database import Base
 # 必須匯入所有模型，alembic 才能自動偵測資料表
-from app.models import user, portfolio, asset_category, transaction, position, net_worth, dca
+from app.models import user, portfolio, asset_category, transaction, position, net_worth, dca, liability
 
 settings = get_settings()
 

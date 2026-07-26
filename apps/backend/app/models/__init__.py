@@ -7,6 +7,7 @@ from app.models.transaction import Transaction
 from app.models.position import CurrentPosition
 from app.models.net_worth import HistoricalNetWorth
 from app.models.dca import DCASchedule, DCAExecution
+from app.models.liability import Liability, LiabilityPayment
 
 __all__ = [
     "User",
@@ -17,4 +18,6 @@ __all__ = [
     "HistoricalNetWorth",
     "DCASchedule",
     "DCAExecution",
+    "Liability",
+    "LiabilityPayment",
 ]

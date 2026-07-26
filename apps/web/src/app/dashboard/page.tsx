@@ -404,6 +404,13 @@ export default function DashboardPage() {
                     <button
                         className="btn-secondary"
                         style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+                        onClick={() => router.push('/dashboard/liabilities')}
+                    >
+                        💳 負債
+                    </button>
+                    <button
+                        className="btn-secondary"
+                        style={{ padding: '8px 16px', fontSize: '0.85rem' }}
                         onClick={() => setShowCreateModal(true)}
                     >
                         + 新增組合
