@@ -493,7 +493,7 @@ export default function LiabilitiesPage() {
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
                             <div>
-                                <label style={labelStyle}>起始日（選填）</label>
+                                <label style={labelStyle}>起始日／撥款日（選填）</label>
                                 <input className="input-field" type="date"
                                     value={formStartDate} onChange={(e) => setFormStartDate(e.target.value)} />
                             </div>
@@ -506,6 +506,7 @@ export default function LiabilitiesPage() {
 
                         <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginBottom: '14px' }}>
                             建立後會自動在持倉中新增等額的負債部位，總負債與淨值即時反映;每次記錄還款會自動沖減餘額。
+                            第一期繳款日為起始日的下一個週期（如 1/17 撥款的月繳貸款，第一期為 2/17）。
                         </p>
 
                         {formError && (

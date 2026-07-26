@@ -51,6 +51,10 @@ async def main() -> None:
     @event.listens_for(engine.sync_engine, "connect")
     def _sqlite_disable_driver_tx(dbapi_connection, connection_record):
         dbapi_connection.isolation_level = None
+        # 啟用外鍵檢查，模擬 Postgres 行為（否則刪除順序錯誤不會被抓到）
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
     @event.listens_for(engine.sync_engine, "begin")
     def _sqlite_emit_begin(conn):
@@ -90,7 +94,8 @@ async def main() -> None:
         resp = await service.get_liability(demo_user.id, li.id)
         assert resp.outstanding_balance == Decimal("600000")
         assert resp.progress_pct == 0.0
-        assert resp.next_payment_date == date(2026, 1, 5)
+        # 起始日=撥款日，第一期於下一週期繳款
+        assert resp.next_payment_date == date(2026, 2, 5)
         print("✅ 情境 1：建立負債 → 自動建立持倉、餘額=本金")
 
         # === 2. 記錄還款 ===
@@ -105,7 +110,7 @@ async def main() -> None:
         assert resp.paid_periods == 2
         assert resp.paid_amount == Decimal("20000")
         assert abs(resp.progress_pct - 3.33) < 0.01, f"進度應約 3.33%，實際 {resp.progress_pct}"
-        assert resp.next_payment_date == date(2026, 3, 5)
+        assert resp.next_payment_date == date(2026, 4, 5)
         print("✅ 情境 2：記錄還款 → 餘額沖減、進度/下次繳款日正確")
 
         # === 3. 還清 → 自動結清 ===
@@ -172,19 +177,19 @@ async def main() -> None:
             payment_day=17,
             start_date=date(2025, 1, 17),
         ))
-        as_of = date(2025, 6, 20)  # 應已繳 1/17~6/17 共 6 期
+        as_of = date(2025, 6, 20)  # 1/17 撥款 → 第一期 2/17，至 6/20 應已繳 5 期
         preview = await service.preview_backfill(demo_user.id, li3.id, as_of=as_of)
-        assert preview.expected_periods == 6, f"應繳 6 期，實際 {preview.expected_periods}"
-        assert preview.pending_periods == 6
-        assert preview.pending_amount == Decimal("60000")
-        assert preview.first_date == date(2025, 1, 17)
+        assert preview.expected_periods == 5, f"應繳 5 期，實際 {preview.expected_periods}"
+        assert preview.pending_periods == 5
+        assert preview.pending_amount == Decimal("50000")
+        assert preview.first_date == date(2025, 2, 17)
         assert preview.last_date == date(2025, 6, 17)
 
         created = await service.backfill_payments(demo_user.id, li3.id, as_of=as_of)
-        assert created == 6, f"應補登 6 期，實際 {created}"
+        assert created == 5, f"應補登 5 期，實際 {created}"
         resp3 = await service.get_liability(demo_user.id, li3.id)
-        assert resp3.paid_periods == 6
-        assert resp3.outstanding_balance == Decimal("60000")
+        assert resp3.paid_periods == 5
+        assert resp3.outstanding_balance == Decimal("70000")
         assert resp3.next_payment_date == date(2025, 7, 17)
         # 重複執行不應多補
         assert await service.backfill_payments(demo_user.id, li3.id, as_of=as_of) == 0
@@ -217,7 +222,7 @@ async def main() -> None:
         src_payments = (await session.execute(
             select(LiabilityPayment).where(LiabilityPayment.liability_id == li3.id)
         )).scalars().all()
-        assert len(src_payments) == 6
+        assert len(src_payments) == 5
         for _ in range(2):  # 模擬多按兩次 → 各期多出兩份重複
             for src in src_payments:
                 dup_tx = Transaction(
@@ -239,15 +244,15 @@ async def main() -> None:
         await session.flush()
 
         preview = await service.preview_backfill(demo_user.id, li3.id, as_of=as_of)
-        assert preview.duplicate_payments == 12, f"應偵測 12 筆重複，實際 {preview.duplicate_payments}"
+        assert preview.duplicate_payments == 10, f"應偵測 10 筆重複，實際 {preview.duplicate_payments}"
 
         removed = await service.dedupe_backfill_payments(demo_user.id, li3.id)
-        assert removed == 12, f"應清除 12 筆，實際 {removed}"
+        assert removed == 10, f"應清除 10 筆，實際 {removed}"
         resp3 = await service.get_liability(demo_user.id, li3.id)
-        assert resp3.paid_periods == 6, f"清理後應剩 6 期，實際 {resp3.paid_periods}"
-        assert resp3.paid_amount == Decimal("60000")
-        assert resp3.outstanding_balance == Decimal("60000"), \
-            f"重算後餘額應為 60000，實際 {resp3.outstanding_balance}"
+        assert resp3.paid_periods == 5, f"清理後應剩 5 期，實際 {resp3.paid_periods}"
+        assert resp3.paid_amount == Decimal("50000")
+        assert resp3.outstanding_balance == Decimal("70000"), \
+            f"重算後餘額應為 70000，實際 {resp3.outstanding_balance}"
         assert resp3.is_active is True
         # 再跑一次應為 no-op
         assert await service.dedupe_backfill_payments(demo_user.id, li3.id) == 0

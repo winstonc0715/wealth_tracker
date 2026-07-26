@@ -47,9 +47,13 @@ def _add_cycle(base: date, cycle: PaymentCycle, periods: int) -> date:
 
 
 def _due_date(liability: Liability, period_index: int) -> date:
-    """第 period_index 期（0-based）的應繳日，含每期繳款日調整"""
+    """第 period_index 期（0-based）的應繳日，含每期繳款日調整。
+
+    起始日視為撥款/合約日，第一期於下一個週期繳款
+    （慣例：1/17 撥款的月繳貸款，第一期應繳日為 2/17）。
+    """
     due = _add_cycle(
-        liability.start_date, liability.payment_cycle, period_index
+        liability.start_date, liability.payment_cycle, period_index + 1
     )
     if liability.payment_day and liability.payment_cycle in (
         PaymentCycle.MONTHLY, PaymentCycle.QUARTERLY
@@ -210,14 +214,18 @@ class LiabilityService:
         if not payment or payment.liability_id != liability.id:
             raise ValueError("還款紀錄不存在")
 
-        tx_service = TransactionService(self.db)
-        if payment.transaction_id:
-            try:
-                await tx_service.delete_transaction(payment.transaction_id)
-            except ValueError:
-                pass  # 交易已被手動刪除
+        # 必須先刪還款紀錄再刪交易：payment.transaction_id 外鍵
+        # 指向交易，順序相反會在 Postgres 觸發外鍵違規
+        tx_id = payment.transaction_id
         await self.db.delete(payment)
         await self.db.flush()
+
+        if tx_id:
+            tx_service = TransactionService(self.db)
+            try:
+                await tx_service.delete_transaction(tx_id)
+            except ValueError:
+                pass  # 交易已被手動刪除
 
         if not liability.is_active:
             liability.is_active = True
