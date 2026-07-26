@@ -73,6 +73,8 @@ export default function DashboardPage() {
     const [editSymbol, setEditSymbol] = useState('');
     const [editName, setEditName] = useState('');
     const [editCurrency, setEditCurrency] = useState('TWD');
+    const [editQuantity, setEditQuantity] = useState('');
+    const [editAvgCost, setEditAvgCost] = useState('');
     const [editLoading, setEditLoading] = useState(false);
     const [editError, setEditError] = useState('');
     const [editSuccess, setEditSuccess] = useState('');
@@ -143,6 +145,8 @@ export default function DashboardPage() {
         setEditSymbol(position.symbol);
         setEditName(position.name || '');
         setEditCurrency(position.currency);
+        setEditQuantity(String(Number(position.total_quantity)));
+        setEditAvgCost(String(Number(position.avg_cost)));
         setEditError('');
         setEditSuccess('');
     };
@@ -154,6 +158,14 @@ export default function DashboardPage() {
             return;
         }
 
+        const qty = editQuantity !== '' ? parseFloat(editQuantity) : undefined;
+        const cost = editAvgCost !== '' ? parseFloat(editAvgCost) : undefined;
+        if ((qty !== undefined && (isNaN(qty) || qty < 0)) ||
+            (cost !== undefined && (isNaN(cost) || cost < 0))) {
+            setEditError('數量與成本必須是不小於 0 的數字');
+            return;
+        }
+
         setEditLoading(true);
         setEditError('');
         try {
@@ -162,6 +174,8 @@ export default function DashboardPage() {
                 symbol: editSymbol.toUpperCase().trim(),
                 name: editName || undefined,
                 currency: editCurrency,
+                total_quantity: qty,
+                avg_cost: cost,
             });
             setEditSuccess('✅ 持倉已更新，重新計算中...');
             await refreshAll();
@@ -763,6 +777,23 @@ export default function DashboardPage() {
                                     value={editName} onChange={(e) => setEditName(e.target.value)} />
                             </div>
                         </div>
+
+                        {/* 數量 + 平均成本 */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                            <div>
+                                <label style={labelStyle}>持倉數量</label>
+                                <input className="input-field" type="number" step="any" min="0"
+                                    value={editQuantity} onChange={(e) => setEditQuantity(e.target.value)} />
+                            </div>
+                            <div>
+                                <label style={labelStyle}>平均成本</label>
+                                <input className="input-field" type="number" step="any" min="0"
+                                    value={editAvgCost} onChange={(e) => setEditAvgCost(e.target.value)} />
+                            </div>
+                        </div>
+                        <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginBottom: '12px' }}>
+                            調整數量/成本會以一組「調整交易」記錄（先按原均價沖銷、再按新均價建立），不影響已實現損益，交易歷史完整保留。
+                        </p>
 
                         {/* 幣別 */}
                         <div style={{ marginBottom: '16px' }}>

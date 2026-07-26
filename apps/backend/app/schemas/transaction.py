@@ -51,6 +51,9 @@ class PositionAssetUpdate(BaseModel):
     symbol: str | None = Field(default=None, max_length=20)
     name: str | None = Field(default=None, max_length=100)
     currency: str | None = Field(default=None, max_length=10)
+    # 直接指定目標持倉數量/平均成本（以調整交易方式達成，不破壞交易歷史）
+    total_quantity: Decimal | None = Field(default=None, ge=0)
+    avg_cost: Decimal | None = Field(default=None, ge=0)
 
 
 class TransactionResponse(BaseModel):

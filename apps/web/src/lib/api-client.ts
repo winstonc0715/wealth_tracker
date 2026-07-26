@@ -279,7 +279,10 @@ class ApiClient {
     async updatePositionAsset(
         portfolioId: string,
         symbol: string,
-        data: { category_id?: number; symbol?: string; name?: string; currency?: string },
+        data: {
+            category_id?: number; symbol?: string; name?: string; currency?: string;
+            total_quantity?: number; avg_cost?: number;
+        },
     ) {
         return this.request<{
             symbol: string; name: string | null; category_id: number;

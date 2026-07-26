@@ -164,11 +164,99 @@ class TransactionService:
         )
         result_pos = await self.db.execute(stmt_pos)
         position = result_pos.scalar_one()
+
+        # 直接指定目標數量/成本：以調整交易沖銷再重建，確保重算結果一致
+        if data.total_quantity is not None or data.avg_cost is not None:
+            target_qty = (
+                data.total_quantity
+                if data.total_quantity is not None
+                else position.total_quantity
+            )
+            target_cost = (
+                data.avg_cost if data.avg_cost is not None else position.avg_cost
+            )
+            if (
+                target_qty != position.total_quantity
+                or target_cost != position.avg_cost
+            ):
+                await self._adjust_position_balance(position, target_qty, target_cost)
+                await self.recalculate_position(portfolio_id, new_symbol)
+                await self.db.flush()
+                await self.db.refresh(position)
         logger.info(
             "持倉標的已修改: %s → %s (category=%s, currency=%s)",
             symbol, new_symbol, data.category_id, data.currency,
         )
         return position
+
+    async def _adjust_position_balance(
+        self, position: CurrentPosition, target_qty: Decimal, target_cost: Decimal
+    ) -> None:
+        """
+        以調整交易將持倉調整為目標數量/平均成本
+
+        作法：
+        1. 以目前平均成本沖銷全部數量（賣出價=均價 → 已實現損益為 0）
+        2. 以目標均價買回目標數量（重算後平均成本恰為目標值）
+
+        不直接覆寫 CurrentPosition，避免之後任何交易觸發全量重算時被回滾。
+        """
+        from datetime import datetime, timedelta, timezone
+
+        now = datetime.now(timezone.utc)
+        # 買回時間 +1 秒，確保全量重算時沖銷交易一定排在買回之前
+        rebuild_at = now + timedelta(seconds=1)
+        note = "手動調整持倉（編輯數量/成本）"
+
+        # 1. 沖銷現有數量
+        if position.total_quantity > 0:
+            self.db.add(Transaction(
+                portfolio_id=position.portfolio_id,
+                category_id=position.category_id,
+                symbol=position.symbol,
+                asset_name=position.name,
+                tx_type=TransactionType.SELL,
+                quantity=position.total_quantity,
+                unit_price=position.avg_cost,
+                fee=Decimal("0"),
+                currency=position.currency,
+                executed_at=now,
+                note=note,
+            ))
+        elif position.total_quantity < 0:
+            # 負持倉：先買回補至 0
+            self.db.add(Transaction(
+                portfolio_id=position.portfolio_id,
+                category_id=position.category_id,
+                symbol=position.symbol,
+                asset_name=position.name,
+                tx_type=TransactionType.BUY,
+                quantity=-position.total_quantity,
+                unit_price=position.avg_cost,
+                fee=Decimal("0"),
+                currency=position.currency,
+                executed_at=now,
+                note=note,
+            ))
+
+        # 2. 以目標均價建立目標數量
+        if target_qty > 0:
+            self.db.add(Transaction(
+                portfolio_id=position.portfolio_id,
+                category_id=position.category_id,
+                symbol=position.symbol,
+                asset_name=position.name,
+                tx_type=TransactionType.BUY,
+                quantity=target_qty,
+                unit_price=target_cost,
+                fee=Decimal("0"),
+                currency=position.currency,
+                executed_at=rebuild_at,
+                note=note,
+            ))
+
+        await self.db.flush()
+        await self._invalidate_snapshots(position.portfolio_id, now.date())
 
     async def recalculate_position(self, portfolio_id: str, symbol: str) -> None:
         """

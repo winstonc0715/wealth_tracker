@@ -139,6 +139,54 @@ async def main() -> None:
         except ValueError:
             print("✅ 情境 4：不存在的標的 → 正確拋錯")
 
+        # === 調整數量與成本 ===
+        before_txs = len((await session.execute(
+            select(Transaction).where(Transaction.portfolio_id == p.id)
+        )).scalars().all())
+        realized_before = sum(
+            t.realized_pnl or Decimal("0")
+            for t in (await session.execute(
+                select(Transaction).where(Transaction.portfolio_id == p.id)
+            )).scalars().all()
+        )
+        pos5 = await service.update_position_asset(
+            p.id, "0050.TW",
+            PositionAssetUpdate(total_quantity=Decimal("5000"), avg_cost=Decimal("42.5")),
+        )
+        assert pos5.total_quantity == Decimal("5000"), f"數量應為 5000，實際 {pos5.total_quantity}"
+        assert pos5.avg_cost == Decimal("42.5"), f"均價應為 42.5，實際 {pos5.avg_cost}"
+        all_txs = (await session.execute(
+            select(Transaction).where(Transaction.portfolio_id == p.id)
+        )).scalars().all()
+        assert len(all_txs) == before_txs + 2, "應新增 2 筆調整交易（沖銷+重建）"
+        realized_after = sum(t.realized_pnl or Decimal("0") for t in all_txs)
+        assert realized_after == realized_before, (
+            f"調整不應影響已實現損益: {realized_before} → {realized_after}"
+        )
+        print("✅ 情境 5：調整數量/成本 → 精確達標、損益不變、歷史保留")
+
+        # === 只調整成本（數量不變）===
+        pos6 = await service.update_position_asset(
+            p.id, "0050.TW", PositionAssetUpdate(avg_cost=Decimal("43")),
+        )
+        assert pos6.total_quantity == Decimal("5000")
+        assert pos6.avg_cost == Decimal("43")
+        print("✅ 情境 6：只改成本 → 數量不變、成本精確")
+
+        # === 傳相同值 → 不應產生調整交易 ===
+        count_before = len((await session.execute(
+            select(Transaction).where(Transaction.portfolio_id == p.id)
+        )).scalars().all())
+        await service.update_position_asset(
+            p.id, "0050.TW",
+            PositionAssetUpdate(total_quantity=Decimal("5000"), avg_cost=Decimal("43")),
+        )
+        count_after = len((await session.execute(
+            select(Transaction).where(Transaction.portfolio_id == p.id)
+        )).scalars().all())
+        assert count_after == count_before, "相同值不應新增調整交易"
+        print("✅ 情境 7：值未變 → 不產生多餘調整交易")
+
     print("\n🎉 全部通過")
 
 
