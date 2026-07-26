@@ -322,14 +322,15 @@ class PortfolioService:
             for r in records
         }
 
-        # 為了保證即時圖表尾巴正確，今天若沒快照，自動補即時淨值
-        if today not in record_map:
-            try:
-                summary = await self.get_summary(portfolio_id, force_refresh)
-                record_map[today] = summary.net_worth
-                liab_map[today] = summary.total_liabilities
-            except Exception:
-                pass
+        # 圖表尾巴（今天）永遠用即時淨值：每小時的背景快照最多舊一小時，
+        # 若只在「今天沒快照」時補值，新增交易後圖尾會停在舊快照不動。
+        # 即時計算失敗時退回既有快照值（若有）。
+        try:
+            summary = await self.get_summary(portfolio_id, force_refresh)
+            record_map[today] = summary.net_worth
+            liab_map[today] = summary.total_liabilities
+        except Exception as e:
+            logger.warning("即時淨值計算失敗，圖尾沿用當日快照: %s", e)
 
         # 若快照涵蓋率達 80% 且至少有 2 天資料，且非強制刷新，則信任快照
         if not force_refresh and len(records) > (days * 0.8) and len(records) > 1:
