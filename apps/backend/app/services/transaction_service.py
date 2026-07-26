@@ -110,6 +110,66 @@ class TransactionService:
         # 清除受影響日期之後的快照，確保走勢圖重算
         await self._invalidate_snapshots(portfolio_id, executed_date)
 
+    async def update_position_asset(
+        self, portfolio_id: str, symbol: str, data: "PositionAssetUpdate"
+    ) -> CurrentPosition:
+        """
+        修改持倉標的屬性（類別/代號/名稱/幣別）
+
+        用於修正選錯市場的持倉（例如誤選美股 0050，實為台股 0050.TW）。
+        流程：
+        1. 更新該標的底下所有交易紀錄的 category_id / symbol / asset_name / currency
+        2. 刪除舊持倉列，透過 recalculate_position 以新屬性重建
+        3. 清除受影響日期之後的淨值快照
+        """
+        stmt = (
+            select(Transaction)
+            .where(Transaction.portfolio_id == portfolio_id)
+            .where(Transaction.symbol == symbol)
+        )
+        result = await self.db.execute(stmt)
+        txs = result.scalars().all()
+        if not txs:
+            raise ValueError("持倉不存在或無交易紀錄")
+
+        new_symbol = data.symbol or symbol
+        earliest_date = min(tx.executed_at for tx in txs).date()
+
+        for tx in txs:
+            if data.category_id is not None:
+                tx.category_id = data.category_id
+            if data.currency is not None:
+                tx.currency = data.currency
+            if data.name is not None:
+                tx.asset_name = data.name
+            tx.symbol = new_symbol
+        await self.db.flush()
+
+        # 刪除舊持倉列（含改名衝突的目標列），讓 recalculate 以新屬性重建
+        await self.db.execute(
+            delete(CurrentPosition)
+            .where(CurrentPosition.portfolio_id == portfolio_id)
+            .where(CurrentPosition.symbol.in_({symbol, new_symbol}))
+        )
+        await self.db.flush()
+
+        await self.recalculate_position(portfolio_id, new_symbol)
+        await self._invalidate_snapshots(portfolio_id, earliest_date)
+        await self.db.flush()
+
+        stmt_pos = (
+            select(CurrentPosition)
+            .where(CurrentPosition.portfolio_id == portfolio_id)
+            .where(CurrentPosition.symbol == new_symbol)
+        )
+        result_pos = await self.db.execute(stmt_pos)
+        position = result_pos.scalar_one()
+        logger.info(
+            "持倉標的已修改: %s → %s (category=%s, currency=%s)",
+            symbol, new_symbol, data.category_id, data.currency,
+        )
+        return position
+
     async def recalculate_position(self, portfolio_id: str, symbol: str) -> None:
         """
         全量重新計算特定標的之持倉成本與每筆賣出之實現損益

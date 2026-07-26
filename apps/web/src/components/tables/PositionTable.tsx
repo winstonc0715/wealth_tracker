@@ -7,6 +7,7 @@ import type { PositionDetail, MarketDetail } from '@/lib/api-client';
 interface PositionTableProps {
     positions: PositionDetail[];
     onQuickTrade?: (position: PositionDetail, action: 'buy' | 'sell') => void;
+    onEdit?: (position: PositionDetail) => void;
 }
 
 type SortColumn = 'symbol' | 'current_price' | 'total_quantity' | 'avg_cost' | 'total_value' | 'unrealized_pnl' | 'unrealized_pnl_pct' | 'price_change_24h_pct';
@@ -20,7 +21,7 @@ const CATEGORY_ICONS: Record<string, string> = {
     liability: '💳',
 };
 
-export default function PositionTable({ positions, onQuickTrade }: PositionTableProps) {
+export default function PositionTable({ positions, onQuickTrade, onEdit }: PositionTableProps) {
     const [flashMap, setFlashMap] = useState<Record<string, 'up' | 'down'>>({});
     const prevPricesRef = useRef<Record<string, number>>({});
     const [sortColumn, setSortColumn] = useState<SortColumn>('total_value');
@@ -249,6 +250,7 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                                 <button onClick={() => onQuickTrade?.(pos, 'buy')} style={actionBtnStyle('buy')}>加碼</button>
                                                 <button onClick={() => onQuickTrade?.(pos, 'sell')} style={actionBtnStyle('sell')}>減碼</button>
+                                                <button onClick={() => onEdit?.(pos)} style={actionBtnStyle('edit')}>編輯</button>
                                             </div>
                                         </td>
                                     </tr>
@@ -365,13 +367,19 @@ export default function PositionTable({ positions, onQuickTrade }: PositionTable
     );
 }
 
-const actionBtnStyle = (type: 'buy' | 'sell') => ({
+const ACTION_BTN_COLORS = {
+    buy: { border: 'rgba(34, 197, 94, 0.3)', bg: 'rgba(34, 197, 94, 0.1)', text: '#22c55e' },
+    sell: { border: 'rgba(239, 68, 68, 0.3)', bg: 'rgba(239, 68, 68, 0.1)', text: '#ef4444' },
+    edit: { border: 'rgba(99, 102, 241, 0.3)', bg: 'rgba(99, 102, 241, 0.1)', text: '#818cf8' },
+} as const;
+
+const actionBtnStyle = (type: 'buy' | 'sell' | 'edit') => ({
     padding: '2px 8px',
     borderRadius: '4px',
     border: '1px solid',
-    borderColor: type === 'buy' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)',
-    background: type === 'buy' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-    color: type === 'buy' ? '#22c55e' : '#ef4444',
+    borderColor: ACTION_BTN_COLORS[type].border,
+    background: ACTION_BTN_COLORS[type].bg,
+    color: ACTION_BTN_COLORS[type].text,
     cursor: 'pointer',
     fontSize: '0.7rem',
     fontWeight: 600,

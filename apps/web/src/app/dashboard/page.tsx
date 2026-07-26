@@ -67,6 +67,16 @@ export default function DashboardPage() {
     const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
     const [isSearching, setIsSearching] = useState(false);
 
+    // 持倉編輯 Modal 狀態
+    const [editingPosition, setEditingPosition] = useState<PositionDetail | null>(null);
+    const [editCategoryId, setEditCategoryId] = useState(1);
+    const [editSymbol, setEditSymbol] = useState('');
+    const [editName, setEditName] = useState('');
+    const [editCurrency, setEditCurrency] = useState('TWD');
+    const [editLoading, setEditLoading] = useState(false);
+    const [editError, setEditError] = useState('');
+    const [editSuccess, setEditSuccess] = useState('');
+
     // Debounce search effect
     useEffect(() => {
         if (!symbol.trim() || symbol.trim().length === 0) {
@@ -124,6 +134,43 @@ export default function DashboardPage() {
         setCurrency(position.currency);
         setUnitPrice(String(Number(position.current_price)));
         setShowTxModal(true);
+    };
+
+    // 開啟持倉編輯 Modal（修正選錯市場/幣別的標的）
+    const handleEditPosition = (position: PositionDetail) => {
+        setEditingPosition(position);
+        setEditCategoryId(CATEGORY_IDS[position.category_slug] || 1);
+        setEditSymbol(position.symbol);
+        setEditName(position.name || '');
+        setEditCurrency(position.currency);
+        setEditError('');
+        setEditSuccess('');
+    };
+
+    const handleSavePositionEdit = async () => {
+        if (!selectedPortfolio || !editingPosition) return;
+        if (!editSymbol.trim()) {
+            setEditError('標的代碼不可為空');
+            return;
+        }
+
+        setEditLoading(true);
+        setEditError('');
+        try {
+            await apiClient.updatePositionAsset(selectedPortfolio.id, editingPosition.symbol, {
+                category_id: editCategoryId,
+                symbol: editSymbol.toUpperCase().trim(),
+                name: editName || undefined,
+                currency: editCurrency,
+            });
+            setEditSuccess('✅ 持倉已更新，重新計算中...');
+            await refreshAll();
+            setTimeout(() => setEditingPosition(null), 1200);
+        } catch (err) {
+            setEditError((err as Error).message);
+        } finally {
+            setEditLoading(false);
+        }
     };
 
     const resetTxForm = () => {
@@ -447,7 +494,7 @@ export default function DashboardPage() {
                 </div>
 
                 {/* 持倉表格 */}
-                <PositionTable positions={summary?.positions || []} onQuickTrade={handleQuickTrade} />
+                <PositionTable positions={summary?.positions || []} onQuickTrade={handleQuickTrade} onEdit={handleEditPosition} />
             </main>
 
             {/* ====== 新增交易 Modal ====== */}
@@ -657,6 +704,96 @@ export default function DashboardPage() {
                             <button className="btn-primary" onClick={handleAddTransaction} disabled={txLoading}
                                 style={{ opacity: txLoading ? 0.6 : 1, minWidth: '120px' }}>
                                 {txLoading ? '處理中...' : '確認新增'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ====== 編輯持倉 Modal ====== */}
+            {editingPosition && (
+                <div style={{
+                    position: 'fixed', inset: 0,
+                    background: 'rgba(0,0,0,0.6)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    zIndex: 200, backdropFilter: 'blur(6px)',
+                }} onClick={() => setEditingPosition(null)}>
+                    <div className="card-glass" style={{
+                        maxWidth: '480px', width: '100%', maxHeight: '90vh', overflowY: 'auto',
+                    }} onClick={(e) => e.stopPropagation()}>
+                        <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '8px' }}>
+                            ✏️ 編輯持倉 — {editingPosition.symbol}
+                        </h3>
+                        <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '20px' }}>
+                            修改會套用到此標的的所有交易紀錄，並重新計算持倉與損益。
+                            適合修正選錯市場的標的（例如誤選美股的 0050，實為台股）。
+                        </p>
+
+                        {/* 資產類別 */}
+                        <label style={labelStyle}>資產類別</label>
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '16px' }}>
+                            {CATEGORIES.map((c) => (
+                                <button key={c.id} onClick={() => {
+                                    setEditCategoryId(c.id);
+                                    // 智能切換預設幣別
+                                    if (c.id === 2 || c.id === 3) setEditCurrency('USD');
+                                    else setEditCurrency('TWD');
+                                }} style={{
+                                    padding: '6px 14px', borderRadius: '8px', border: '1px solid',
+                                    borderColor: editCategoryId === c.id ? 'var(--color-primary)' : 'var(--color-border)',
+                                    background: editCategoryId === c.id ? 'rgba(99,102,241,0.15)' : 'var(--color-bg-secondary)',
+                                    color: editCategoryId === c.id ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                                    cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600,
+                                }}>
+                                    {c.icon} {c.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* 標的代碼 + 名稱 */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                            <div>
+                                <label style={labelStyle}>標的代碼 *</label>
+                                <input className="input-field" value={editSymbol}
+                                    onChange={(e) => setEditSymbol(e.target.value.toUpperCase())} />
+                            </div>
+                            <div>
+                                <label style={labelStyle}>標的名稱</label>
+                                <input className="input-field" placeholder="如 元大台灣50"
+                                    value={editName} onChange={(e) => setEditName(e.target.value)} />
+                            </div>
+                        </div>
+
+                        {/* 幣別 */}
+                        <div style={{ marginBottom: '16px' }}>
+                            <label style={labelStyle}>計價幣別</label>
+                            <select className="input-field" value={editCurrency}
+                                onChange={(e) => setEditCurrency(e.target.value)}>
+                                <option value="TWD">TWD 新台幣</option>
+                                <option value="USD">USD 美元</option>
+                            </select>
+                        </div>
+
+                        {/* 錯誤/成功訊息 */}
+                        {editError && (
+                            <div style={{
+                                padding: '10px 14px', borderRadius: '8px', marginBottom: '12px',
+                                background: 'var(--color-loss-bg)', color: 'var(--color-loss)', fontSize: '0.9rem',
+                            }}>{editError}</div>
+                        )}
+                        {editSuccess && (
+                            <div style={{
+                                padding: '10px 14px', borderRadius: '8px', marginBottom: '12px',
+                                background: 'var(--color-profit-bg)', color: 'var(--color-profit)', fontSize: '0.9rem',
+                            }}>{editSuccess}</div>
+                        )}
+
+                        {/* 按鈕 */}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                            <button className="btn-secondary" onClick={() => setEditingPosition(null)}>取消</button>
+                            <button className="btn-primary" onClick={handleSavePositionEdit} disabled={editLoading}
+                                style={{ opacity: editLoading ? 0.6 : 1, minWidth: '120px' }}>
+                                {editLoading ? '處理中...' : '儲存修改'}
                             </button>
                         </div>
                     </div>

@@ -276,6 +276,20 @@ class ApiClient {
         return this.request<SearchResult[]>(`/portfolio/search?query=${encodeURIComponent(query)}&category_slug=${encodeURIComponent(category_slug)}`);
     }
 
+    async updatePositionAsset(
+        portfolioId: string,
+        symbol: string,
+        data: { category_id?: number; symbol?: string; name?: string; currency?: string },
+    ) {
+        return this.request<{
+            symbol: string; name: string | null; category_id: number;
+            currency: string; total_quantity: number; avg_cost: number;
+        }>(`/portfolio/${portfolioId}/positions/${encodeURIComponent(symbol)}`, {
+            method: 'PATCH',
+            body: JSON.stringify(data),
+        });
+    }
+
     // === Transactions ===
     async createTransaction(data: TransactionInput) {
         return this.request<Transaction>('/transactions/', {

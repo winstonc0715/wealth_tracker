@@ -40,6 +40,19 @@ class TransactionUpdate(BaseModel):
     executed_at: datetime | None = None
     note: str | None = None
 
+class PositionAssetUpdate(BaseModel):
+    """
+    修改持倉標的屬性請求
+
+    用於修正選錯市場/幣別的持倉（例如誤選美股 0050，實為台股 0050）。
+    會同步更新該標的底下所有交易紀錄並全量重算持倉。
+    """
+    category_id: int | None = Field(default=None, ge=1)
+    symbol: str | None = Field(default=None, max_length=20)
+    name: str | None = Field(default=None, max_length=100)
+    currency: str | None = Field(default=None, max_length=10)
+
+
 class TransactionResponse(BaseModel):
     """交易紀錄回應"""
     id: str

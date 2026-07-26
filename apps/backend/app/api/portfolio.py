@@ -20,6 +20,7 @@ from app.schemas.portfolio import (
     PortfolioCreate, PortfolioUpdate, PortfolioResponse,
     PortfolioSummary, AllocationResponse, PortfolioHistoryResponse,
 )
+from app.schemas.transaction import PositionAssetUpdate
 from app.api.auth import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -256,6 +257,47 @@ async def get_portfolio_history(
     except Exception as e:
         logger.error("取得歷史淨值失敗: %s", e)
         raise HTTPException(status_code=500, detail=f"取得歷史淨值失敗: {e}")
+
+
+@router.patch("/{portfolio_id}/positions/{symbol}", response_model=ApiResponse[dict])
+async def update_position_asset(
+    portfolio_id: str,
+    symbol: str,
+    data: PositionAssetUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    修改持倉標的屬性（類別/代號/名稱/幣別）
+
+    用於修正選錯市場的持倉（例如誤選美股 0050，實為台股）。
+    會同步更新該標的底下所有交易紀錄並全量重算持倉與損益。
+    """
+    portfolio = await db.get(Portfolio, portfolio_id)
+    if not portfolio or portfolio.user_id != user.id:
+        raise HTTPException(status_code=404, detail="投資組合不存在")
+
+    from app.services.transaction_service import TransactionService
+    service = TransactionService(db)
+    try:
+        position = await service.update_position_asset(portfolio_id, symbol, data)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error("修改持倉標的失敗: %s", e)
+        raise HTTPException(status_code=500, detail=f"修改持倉標的失敗: {e}")
+
+    return ApiResponse(
+        data={
+            "symbol": position.symbol,
+            "name": position.name,
+            "category_id": position.category_id,
+            "currency": position.currency,
+            "total_quantity": float(position.total_quantity),
+            "avg_cost": float(position.avg_cost),
+        },
+        message="持倉已更新",
+    )
 
 
 @router.post("/{portfolio_id}/snapshot", response_model=ApiResponse[dict])
