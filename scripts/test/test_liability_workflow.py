@@ -162,6 +162,53 @@ async def main() -> None:
         assert _add_cycle(date(2026, 1, 5), PaymentCycle.BIWEEKLY, 2) == date(2026, 2, 2)
         print("✅ 情境 6：週期計算（含月底/跨年）正確")
 
+        # === 7. 依日期自動補登 ===
+        li3 = await service.create_liability(demo_user.id, LiabilityCreate(
+            portfolio_id=p.id, name="信貸",
+            principal=Decimal("120000"),
+            payment_cycle=PaymentCycle.MONTHLY,
+            total_periods=12,
+            payment_amount=Decimal("10000"),
+            payment_day=17,
+            start_date=date(2025, 1, 17),
+        ))
+        as_of = date(2025, 6, 20)  # 應已繳 1/17~6/17 共 6 期
+        preview = await service.preview_backfill(demo_user.id, li3.id, as_of=as_of)
+        assert preview.expected_periods == 6, f"應繳 6 期，實際 {preview.expected_periods}"
+        assert preview.pending_periods == 6
+        assert preview.pending_amount == Decimal("60000")
+        assert preview.first_date == date(2025, 1, 17)
+        assert preview.last_date == date(2025, 6, 17)
+
+        created = await service.backfill_payments(demo_user.id, li3.id, as_of=as_of)
+        assert created == 6, f"應補登 6 期，實際 {created}"
+        resp3 = await service.get_liability(demo_user.id, li3.id)
+        assert resp3.paid_periods == 6
+        assert resp3.outstanding_balance == Decimal("60000")
+        assert resp3.next_payment_date == date(2025, 7, 17)
+        # 重複執行不應多補
+        assert await service.backfill_payments(demo_user.id, li3.id, as_of=as_of) == 0
+        print("✅ 情境 7：依日期自動補登 → 期數/金額/下次繳款日正確、重跑冪等")
+
+        # === 8. 補登以餘額為上限、歸零自動結清 ===
+        li4 = await service.create_liability(demo_user.id, LiabilityCreate(
+            portfolio_id=p.id, name="小額貸",
+            principal=Decimal("25000"),
+            payment_cycle=PaymentCycle.MONTHLY,
+            total_periods=10,
+            payment_amount=Decimal("10000"),
+            start_date=date(2025, 1, 1),
+        ))
+        created = await service.backfill_payments(
+            demo_user.id, li4.id, as_of=date(2025, 12, 31)
+        )
+        assert created == 3, f"餘額 25000 只夠補 3 期（最後一期 5000），實際 {created}"
+        resp4 = await service.get_liability(demo_user.id, li4.id)
+        assert resp4.outstanding_balance == Decimal("0")
+        assert resp4.paid_amount == Decimal("25000")
+        assert resp4.is_active is False, "餘額歸零應自動結清"
+        print("✅ 情境 8：補登以餘額為上限 → 尾期沖到 0 並自動結清")
+
     print("\n🎉 全部通過")
 
 

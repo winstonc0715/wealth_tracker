@@ -23,7 +23,7 @@ from app.models.position import CurrentPosition
 from app.models.transaction import TransactionType
 from app.schemas.liability import (
     LiabilityCreate, LiabilityUpdate, PaymentCreate,
-    LiabilityResponse, PaymentResponse,
+    LiabilityResponse, PaymentResponse, BackfillPreview,
 )
 from app.schemas.transaction import TransactionCreate
 from app.services.transaction_service import TransactionService
@@ -44,6 +44,32 @@ def _add_cycle(base: date, cycle: PaymentCycle, periods: int) -> date:
     month = total % 12 + 1
     day = min(base.day, monthrange(year, month)[1])
     return date(year, month, day)
+
+
+def _due_date(liability: Liability, period_index: int) -> date:
+    """第 period_index 期（0-based）的應繳日，含每期繳款日調整"""
+    due = _add_cycle(
+        liability.start_date, liability.payment_cycle, period_index
+    )
+    if liability.payment_day and liability.payment_cycle in (
+        PaymentCycle.MONTHLY, PaymentCycle.QUARTERLY
+    ):
+        day = min(liability.payment_day, monthrange(due.year, due.month)[1])
+        due = due.replace(day=day)
+    return due
+
+
+def _expected_periods(liability: Liability, as_of: date) -> int:
+    """依日期推算至 as_of 為止應已繳的期數（上限為總期數）"""
+    if not liability.start_date:
+        return 0
+    count = 0
+    while (
+        count < liability.total_periods
+        and _due_date(liability, count) <= as_of
+    ):
+        count += 1
+    return count
 
 
 class LiabilityService:
@@ -196,6 +222,76 @@ class LiabilityService:
         if not liability.is_active:
             liability.is_active = True
 
+    async def preview_backfill(
+        self, user_id: str, liability_id: str, as_of: date | None = None
+    ) -> BackfillPreview:
+        """預覽依日期推算的待補登期數與金額（不寫入）"""
+        liability = await self._get_user_liability(user_id, liability_id)
+        as_of = as_of or date.today()
+        expected = _expected_periods(liability, as_of)
+        paid = len(liability.payments)
+
+        position = await self._get_position(
+            liability.portfolio_id, liability.symbol
+        )
+        remaining = position.total_quantity if position else Decimal("0")
+        if remaining < 0:
+            remaining = Decimal("0")
+
+        pending_dates: list[date] = []
+        pending_amount = Decimal("0")
+        for i in range(paid, expected):
+            amount = min(liability.payment_amount, remaining)
+            if amount <= 0:
+                break
+            pending_dates.append(_due_date(liability, i))
+            pending_amount += amount
+            remaining -= amount
+
+        return BackfillPreview(
+            expected_periods=expected,
+            paid_periods=paid,
+            pending_periods=len(pending_dates),
+            pending_amount=pending_amount,
+            first_date=pending_dates[0] if pending_dates else None,
+            last_date=pending_dates[-1] if pending_dates else None,
+        )
+
+    async def backfill_payments(
+        self, user_id: str, liability_id: str, as_of: date | None = None
+    ) -> int:
+        """依日期推算補登過往還款：每期建立還款紀錄與沖減交易。
+
+        金額以剩餘餘額為上限，餘額歸零即停（record_payment 會自動結清）。
+        重複執行安全：只補「已繳期數」到「應繳期數」之間的缺口。
+        """
+        liability = await self._get_user_liability(user_id, liability_id)
+        as_of = as_of or date.today()
+        expected = _expected_periods(liability, as_of)
+        paid = len(liability.payments)
+
+        created = 0
+        for i in range(paid, expected):
+            position = await self._get_position(
+                liability.portfolio_id, liability.symbol
+            )
+            remaining = position.total_quantity if position else Decimal("0")
+            amount = min(liability.payment_amount, remaining)
+            if amount <= 0:
+                break
+            await self.record_payment(user_id, liability.id, PaymentCreate(
+                amount=amount,
+                payment_date=_due_date(liability, i),
+                note=f"自動補登第 {i + 1} 期",
+            ))
+            created += 1
+
+        if created:
+            logger.info(
+                "負債「%s」自動補登 %d 期還款", liability.name, created
+            )
+        return created
+
     async def list_liabilities(
         self, user_id: str, portfolio_id: str
     ) -> list[LiabilityResponse]:
@@ -241,22 +337,13 @@ class LiabilityService:
 
         next_payment = None
         if liability.is_active and liability.start_date:
-            next_payment = _add_cycle(
-                liability.start_date, liability.payment_cycle, paid_periods
-            )
-            if liability.payment_day and liability.payment_cycle in (
-                PaymentCycle.MONTHLY, PaymentCycle.QUARTERLY
-            ):
-                day = min(
-                    liability.payment_day,
-                    monthrange(next_payment.year, next_payment.month)[1],
-                )
-                next_payment = next_payment.replace(day=day)
+            next_payment = _due_date(liability, paid_periods)
 
         resp = LiabilityResponse.model_validate(liability)
         resp.outstanding_balance = outstanding
         resp.paid_amount = paid_amount
         resp.paid_periods = paid_periods
+        resp.expected_periods = _expected_periods(liability, date.today())
         resp.progress_pct = round(progress, 2)
         resp.next_payment_date = next_payment
         resp.payments = [

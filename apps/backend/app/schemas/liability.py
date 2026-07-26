@@ -57,6 +57,16 @@ class PaymentResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class BackfillPreview(BaseModel):
+    """補登預覽：依日期推算的待補期數與金額"""
+    expected_periods: int
+    paid_periods: int
+    pending_periods: int
+    pending_amount: Decimal = Decimal("0")
+    first_date: date | None = None
+    last_date: date | None = None
+
+
 class LiabilityResponse(BaseModel):
     """負債回應（含進度統計）"""
     id: str
@@ -78,6 +88,8 @@ class LiabilityResponse(BaseModel):
     outstanding_balance: Decimal = Decimal("0")
     paid_amount: Decimal = Decimal("0")
     paid_periods: int = 0
+    # 依今日日期推算應已繳的期數（供前端顯示落後提示）
+    expected_periods: int = 0
     progress_pct: float = 0.0
     next_payment_date: date | None = None
     payments: list[PaymentResponse] = []

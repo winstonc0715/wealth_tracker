@@ -13,7 +13,7 @@ import type { Liability } from '@/lib/api-client';
 import { usePortfolioStore } from '@/stores/portfolio-store';
 import {
     ArrowLeft, Plus, Trash2, Banknote, CalendarClock,
-    CheckCircle2, ChevronDown, ChevronUp, Loader2,
+    CheckCircle2, ChevronDown, ChevronUp, Loader2, History,
 } from 'lucide-react';
 
 const CYCLE_LABELS: Record<string, string> = {
@@ -53,6 +53,9 @@ export default function LiabilitiesPage() {
     const [payNote, setPayNote] = useState('');
     const [payLoading, setPayLoading] = useState(false);
     const [payError, setPayError] = useState('');
+
+    // 自動補登
+    const [backfillingId, setBackfillingId] = useState<string | null>(null);
 
     const fetchLiabilities = useCallback(async () => {
         if (!selectedPortfolio) return;
@@ -98,6 +101,32 @@ export default function LiabilitiesPage() {
         setFormError('');
     };
 
+    const handleBackfill = async (li: Liability) => {
+        setBackfillingId(li.id);
+        try {
+            const preview = await apiClient.previewLiabilityBackfill(li.id);
+            if (preview.pending_periods === 0) {
+                flash('沒有需要補登的期數');
+                return;
+            }
+            const ok = confirm(
+                `依起始日推算，「${li.name}」至今應已繳 ${preview.expected_periods} 期，` +
+                `目前記錄 ${preview.paid_periods} 期。\n\n` +
+                `將自動補登 ${preview.pending_periods} 期還款` +
+                `（${preview.first_date} ~ ${preview.last_date}，` +
+                `合計 ${fmtMoney(preview.pending_amount, li.currency)}），餘額會同步沖減。\n確定執行？`
+            );
+            if (!ok) return;
+            await apiClient.backfillLiabilityPayments(li.id);
+            flash(`✅ 已補登 ${preview.pending_periods} 期還款`);
+            await Promise.all([fetchLiabilities(), refreshAll()]);
+        } catch (err) {
+            setError((err as Error).message);
+        } finally {
+            setBackfillingId(null);
+        }
+    };
+
     const handleCreate = async () => {
         if (!selectedPortfolio) return;
         if (!formName.trim() || !formPrincipal || !formPeriods || !formAmount) {
@@ -107,7 +136,7 @@ export default function LiabilitiesPage() {
         setFormLoading(true);
         setFormError('');
         try {
-            await apiClient.createLiability({
+            const created = await apiClient.createLiability({
                 portfolio_id: selectedPortfolio.id,
                 name: formName.trim(),
                 principal: parseFloat(formPrincipal),
@@ -122,6 +151,10 @@ export default function LiabilitiesPage() {
             resetForm();
             flash('✅ 負債已建立');
             await Promise.all([fetchLiabilities(), refreshAll()]);
+            // 起始日在過去 → 詢問是否依日期自動補登過往還款
+            if (created.expected_periods > created.paid_periods) {
+                await handleBackfill(created);
+            }
         } catch (err) {
             setFormError((err as Error).message);
         } finally {
@@ -314,6 +347,33 @@ export default function LiabilitiesPage() {
                                             </span>
                                         </div>
                                     </div>
+
+                                    {/* 依日期推算落後提示 */}
+                                    {li.is_active && li.expected_periods > li.paid_periods && (
+                                        <div style={{
+                                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                            padding: '8px 12px', borderRadius: '8px', marginBottom: '10px',
+                                            background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)',
+                                        }}>
+                                            <span style={{ fontSize: '0.78rem', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <CalendarClock size={13} />
+                                                依日期推算應已繳 {li.expected_periods} 期，落後 {li.expected_periods - li.paid_periods} 期
+                                            </span>
+                                            <button
+                                                onClick={() => handleBackfill(li)}
+                                                disabled={backfillingId === li.id}
+                                                style={{
+                                                    padding: '4px 12px', borderRadius: '6px', cursor: 'pointer',
+                                                    border: '1px solid rgba(245,158,11,0.4)', background: 'rgba(245,158,11,0.15)',
+                                                    color: '#f59e0b', fontSize: '0.75rem', fontWeight: 700,
+                                                    display: 'flex', alignItems: 'center', gap: '5px',
+                                                    opacity: backfillingId === li.id ? 0.6 : 1,
+                                                }}>
+                                                <History size={12} />
+                                                {backfillingId === li.id ? '補登中...' : '一鍵補登至今日'}
+                                            </button>
+                                        </div>
+                                    )}
 
                                     {/* 還款歷史（展開） */}
                                     <button

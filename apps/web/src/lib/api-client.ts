@@ -71,9 +71,19 @@ export interface Liability {
     outstanding_balance: number;
     paid_amount: number;
     paid_periods: number;
+    expected_periods: number;
     progress_pct: number;
     next_payment_date: string | null;
     payments: LiabilityPayment[];
+}
+
+export interface LiabilityBackfillPreview {
+    expected_periods: number;
+    paid_periods: number;
+    pending_periods: number;
+    pending_amount: number;
+    first_date: string | null;
+    last_date: string | null;
 }
 
 export interface LiabilityInput {
@@ -430,6 +440,21 @@ class ApiClient {
 
     async deleteLiabilityPayment(liabilityId: string, paymentId: string): Promise<void> {
         await this.request(`/liabilities/${liabilityId}/payments/${paymentId}`, { method: 'DELETE' });
+    }
+
+    async previewLiabilityBackfill(liabilityId: string): Promise<LiabilityBackfillPreview> {
+        const res = await this.request<LiabilityBackfillPreview>(`/liabilities/${liabilityId}/backfill`);
+        if (!res.data) throw new Error('取得補登預覽失敗');
+        return res.data;
+    }
+
+    async backfillLiabilityPayments(liabilityId: string): Promise<Liability> {
+        const res = await this.request<Liability>(
+            `/liabilities/${liabilityId}/backfill`,
+            { method: 'POST' },
+        );
+        if (!res.data) throw new Error('自動補登失敗');
+        return res.data;
     }
 
     // === 定期定額 (DCA) ===

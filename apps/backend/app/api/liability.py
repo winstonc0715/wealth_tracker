@@ -14,7 +14,7 @@ from app.api.auth import get_current_user
 from app.schemas.common import ApiResponse
 from app.schemas.liability import (
     LiabilityCreate, LiabilityUpdate, PaymentCreate,
-    LiabilityResponse, PaymentResponse,
+    LiabilityResponse, PaymentResponse, BackfillPreview,
 )
 from app.services.liability_service import LiabilityService
 
@@ -116,6 +116,44 @@ async def record_payment(
         return ApiResponse(
             data=PaymentResponse.model_validate(payment),
             message="還款已記錄",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@liability_router.get(
+    "/{liability_id}/backfill", response_model=ApiResponse[BackfillPreview]
+)
+async def preview_backfill(
+    liability_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """預覽依日期推算的待補登期數與金額（不寫入）"""
+    service = LiabilityService(db)
+    try:
+        return ApiResponse(
+            data=await service.preview_backfill(user.id, liability_id)
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@liability_router.post(
+    "/{liability_id}/backfill", response_model=ApiResponse[LiabilityResponse]
+)
+async def backfill_payments(
+    liability_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """依日期推算自動補登過往還款（餘額同步沖減、歸零自動結清）"""
+    service = LiabilityService(db)
+    try:
+        count = await service.backfill_payments(user.id, liability_id)
+        return ApiResponse(
+            data=await service.get_liability(user.id, liability_id),
+            message=f"已補登 {count} 期還款",
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
