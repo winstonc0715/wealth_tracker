@@ -175,6 +175,9 @@ class LiabilityService:
         以一筆調整交易（存入/提出）補足差額，不動任何還款紀錄；
         校正為 0 視為結清，大於 0 恢復進行中。
         """
+        # 順帶校正舊資料的入帳日（修復歷史淨值走勢）
+        await self._normalize_establishment_date(liability)
+
         position = await self._get_position(
             liability.portfolio_id, liability.symbol
         )
@@ -316,11 +319,48 @@ class LiabilityService:
                 seen[key] = p
         return stale
 
+    async def _normalize_establishment_date(
+        self, liability: Liability
+    ) -> bool:
+        """把「建立負債」入帳交易日期校正為撥款日。
+
+        舊版以建立當下入帳，晚於回填的還款交易，導致歷史淨值
+        走勢在回填期間「只扣還款、沒加負債」而虛高。校正後自
+        撥款日起重算快照。
+        """
+        if not liability.start_date:
+            return False
+        stmt = (
+            select(Transaction)
+            .where(Transaction.portfolio_id == liability.portfolio_id)
+            .where(Transaction.symbol == liability.symbol)
+            .where(Transaction.note.like("建立負債%"))
+        )
+        txs = (await self.db.execute(stmt)).scalars().all()
+        target = datetime.combine(
+            liability.start_date, datetime.min.time(), tzinfo=timezone.utc
+        )
+        changed = False
+        for tx in txs:
+            if tx.executed_at.date() != liability.start_date:
+                tx.executed_at = target
+                changed = True
+        if changed:
+            tx_service = TransactionService(self.db)
+            await tx_service._invalidate_snapshots(
+                liability.portfolio_id, liability.start_date
+            )
+            logger.info(
+                "負債「%s」入帳日校正為 %s", liability.name, liability.start_date
+            )
+        return changed
+
     async def dedupe_backfill_payments(
         self, user_id: str, liability_id: str
     ) -> int:
         """清除重複的自動補登紀錄（連同沖減交易），並全量重算持倉"""
         liability = await self._get_user_liability_locked(user_id, liability_id)
+        await self._normalize_establishment_date(liability)
         duplicates = self._find_stale_backfills(liability)
         if not duplicates:
             return 0

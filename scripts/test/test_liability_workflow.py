@@ -340,6 +340,14 @@ async def main() -> None:
         assert pos3.total_quantity == Decimal("72500")
         print("✅ 情境 12：負債部位無損益、成本固定 1、入帳日=撥款日")
 
+        # === 13. 舊資料入帳日自動校正（修復歷史淨值走勢） ===
+        deposit_tx.executed_at = datetime(2026, 7, 26, tzinfo=timezone.utc)  # 模擬舊版建立
+        await session.flush()
+        await service.dedupe_backfill_payments(demo_user.id, li3.id)  # 無重複也會觸發校正
+        assert deposit_tx.executed_at.date() == date(2025, 1, 17), \
+            f"入帳日應校正為撥款日，實際 {deposit_tx.executed_at.date()}"
+        print("✅ 情境 13：舊資料入帳日自動校正為撥款日")
+
     print("\n🎉 全部通過")
 
 
