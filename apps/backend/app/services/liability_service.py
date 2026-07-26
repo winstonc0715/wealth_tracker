@@ -15,6 +15,7 @@ from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.asset_category import AssetCategory
 from app.models.liability import Liability, LiabilityPayment, PaymentCycle
@@ -266,7 +267,14 @@ class LiabilityService:
     async def _get_user_liability(
         self, user_id: str, liability_id: str
     ) -> Liability:
-        liability = await self.db.get(Liability, liability_id)
+        # populate_existing + selectinload：確保 identity map 命中時
+        # payments 仍被預載，避免 async session 下的同步 lazy load
+        liability = await self.db.get(
+            Liability,
+            liability_id,
+            options=[selectinload(Liability.payments)],
+            populate_existing=True,
+        )
         if not liability or liability.user_id != user_id:
             raise ValueError("負債不存在")
         return liability
