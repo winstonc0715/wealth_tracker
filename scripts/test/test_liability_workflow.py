@@ -258,6 +258,41 @@ async def main() -> None:
         assert await service.dedupe_backfill_payments(demo_user.id, li3.id) == 0
         print("✅ 情境 9：清理重複補登 → 保留每期一筆、餘額重算正確")
 
+        # === 10. 清理與排程不符的自動補登（如語意調整/修改起始日後的錯位） ===
+        stray_tx = Transaction(
+            id=str(_uuid.uuid4()),
+            portfolio_id=p.id, category_id=cat_id,
+            symbol=li3.symbol, asset_name="信貸",
+            tx_type=TransactionType.WITHDRAW,
+            quantity=Decimal("10000"), unit_price=Decimal("1"),
+            fee=Decimal("0"), currency="TWD",
+            executed_at=datetime(2025, 1, 17, tzinfo=timezone.utc),
+        )
+        session.add(stray_tx)
+        session.add(LiabilityPayment(
+            liability_id=li3.id,
+            payment_date=date(2025, 1, 17),  # 不在排程上（排程從 2/17 起）
+            amount=Decimal("10000"), transaction_id=stray_tx.id,
+            note="自動補登第 1 期",
+        ))
+        # 手動輸入的還款不受清理影響（即使日期不在排程上）
+        manual = await service.record_payment(demo_user.id, li3.id, PaymentCreate(
+            amount=Decimal("1000"), payment_date=date(2025, 6, 1), note="手動提前還款",
+        ))
+        await session.flush()
+
+        preview = await service.preview_backfill(demo_user.id, li3.id, as_of=as_of)
+        assert preview.duplicate_payments == 1, f"應偵測 1 筆錯位，實際 {preview.duplicate_payments}"
+        removed = await service.dedupe_backfill_payments(demo_user.id, li3.id)
+        assert removed == 1
+        resp3 = await service.get_liability(demo_user.id, li3.id)
+        assert resp3.paid_periods == 6  # 5 筆自動 + 1 筆手動
+        assert resp3.paid_amount == Decimal("51000")
+        assert resp3.outstanding_balance == Decimal("69000"), \
+            f"重算後餘額應為 69000，實際 {resp3.outstanding_balance}"
+        assert any(pm.id == manual.id for pm in resp3.payments), "手動還款不應被清除"
+        print("✅ 情境 10：清理排程錯位的自動補登 → 手動紀錄保留、餘額重算正確")
+
     print("\n🎉 全部通過")
 
 

@@ -231,12 +231,25 @@ class LiabilityService:
             liability.is_active = True
 
     @staticmethod
-    def _find_duplicate_backfills(
+    def _find_stale_backfills(
         liability: Liability,
     ) -> list[LiabilityPayment]:
-        """找出重複的自動補登紀錄（同日期＋同備註，保留最早一筆）"""
+        """找出需要清理的自動補登紀錄。
+
+        兩種情況（只針對備註為「自動補登…」的紀錄，不動手動輸入）：
+        1. 重複：同日期＋同備註，保留最早一筆
+        2. 與排程不符：日期不在依起始日/週期推算的應繳日清單上
+           （例如修改起始日、週期或第一期語意調整後留下的錯位紀錄）
+        """
+        valid_dues: set[date] | None = None
+        if liability.start_date:
+            valid_dues = {
+                _due_date(liability, i)
+                for i in range(liability.total_periods)
+            }
+
         seen: dict[tuple[date, str], LiabilityPayment] = {}
-        duplicates: list[LiabilityPayment] = []
+        stale: list[LiabilityPayment] = []
         ordered = sorted(
             liability.payments,
             key=lambda p: (
@@ -247,19 +260,22 @@ class LiabilityService:
         for p in ordered:
             if not (p.note and p.note.startswith("自動補登")):
                 continue
+            if valid_dues is not None and p.payment_date not in valid_dues:
+                stale.append(p)
+                continue
             key = (p.payment_date, p.note)
             if key in seen:
-                duplicates.append(p)
+                stale.append(p)
             else:
                 seen[key] = p
-        return duplicates
+        return stale
 
     async def dedupe_backfill_payments(
         self, user_id: str, liability_id: str
     ) -> int:
         """清除重複的自動補登紀錄（連同沖減交易），並全量重算持倉"""
         liability = await self._get_user_liability_locked(user_id, liability_id)
-        duplicates = self._find_duplicate_backfills(liability)
+        duplicates = self._find_stale_backfills(liability)
         if not duplicates:
             return 0
 
@@ -329,7 +345,7 @@ class LiabilityService:
             pending_amount=pending_amount,
             first_date=pending_dates[0] if pending_dates else None,
             last_date=pending_dates[-1] if pending_dates else None,
-            duplicate_payments=len(self._find_duplicate_backfills(liability)),
+            duplicate_payments=len(self._find_stale_backfills(liability)),
         )
 
     async def backfill_payments(

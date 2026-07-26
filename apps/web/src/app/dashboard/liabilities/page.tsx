@@ -111,7 +111,7 @@ export default function LiabilitiesPage() {
             }
             const lines: string[] = [];
             if (preview.duplicate_payments > 0) {
-                lines.push(`偵測到 ${preview.duplicate_payments} 筆重複的自動補登紀錄，將清除並重算餘額。`);
+                lines.push(`偵測到 ${preview.duplicate_payments} 筆重複或與排程日期不符的自動補登紀錄，將清除並重算餘額。`);
             }
             if (preview.pending_periods > 0) {
                 lines.push(
