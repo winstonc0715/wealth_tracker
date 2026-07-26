@@ -8,13 +8,13 @@
 
 import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy import select, distinct
+from sqlalchemy import select
 
 from app.database import async_session
 from app.models.position import CurrentPosition
 from app.models.asset_category import AssetCategory
 from app.models.portfolio import Portfolio
-from app.price.manager import PriceManager
+from app.price.manager import get_price_manager
 from app.services.portfolio_service import PortfolioService
 from app.services.dca_service import DCAService
 
@@ -47,12 +47,17 @@ async def sync_all_prices():
     
     try:
         async with async_session() as session:
-            # 取得所有不重複的 (symbol, category_id) 以及對應的 category_slug
-            stmt = select(
-                distinct(CurrentPosition.symbol),
-                AssetCategory.slug
-            ).join(
-                AssetCategory, CurrentPosition.category_id == AssetCategory.id
+            # 取得所有不重複的 (symbol, slug)；
+            # 排除法幣/負債（面額固定 1，不需外部報價）與已清空的部位
+            stmt = (
+                select(CurrentPosition.symbol, AssetCategory.slug)
+                .join(
+                    AssetCategory,
+                    CurrentPosition.category_id == AssetCategory.id,
+                )
+                .where(AssetCategory.slug.notin_(["fiat", "liability"]))
+                .where(CurrentPosition.total_quantity != 0)
+                .distinct()
             )
             result = await session.execute(stmt)
             rows = result.all()
@@ -65,10 +70,9 @@ async def sync_all_prices():
             items = [(row[0], row[1]) for row in rows]
             
             # 使用 PriceManager 批次取得報價，強制穿透快取 (force_refresh=True)
-            manager = PriceManager()
+            manager = get_price_manager()
             # 這裡的 get_prices_batch 內部會將結果寫入快取
             await manager.get_prices_batch(items, force_refresh=True)
-            await manager.close()
             
             logger.info("背景同步全站報價完成 (共 %d 筆不重複標的)", len(items))
             
@@ -94,7 +98,7 @@ async def record_all_portfolios_snapshot():
                 return
             
             # 使用 PortfolioService 進行儲存（需傳入 PriceManager 以計算即時淨值）
-            manager = PriceManager()
+            manager = get_price_manager()
             service = PortfolioService(session, manager)
             for pf in portfolios:
                 try:
@@ -103,7 +107,6 @@ async def record_all_portfolios_snapshot():
                     logger.error("記錄投資組合 %s 淨值失敗: %s", pf.id, ex)
             
             await session.commit()
-            await manager.close()
             logger.info("背景記錄全站淨值快照完成 (共 %d 個投資組合)", len(portfolios))
             
     except Exception as e:
@@ -112,13 +115,16 @@ async def record_all_portfolios_snapshot():
 
 def setup_worker():
     """設定並啟動排程器"""
-    # 設定每 1 分鐘執行一次
+    # 每 5 分鐘同步一次報價（原 1 分鐘：標的一多批次跑不完
+    # 就會 misfire，且在 web process 內與請求搶資源）
     scheduler.add_job(
-        sync_all_prices, 
-        'interval', 
-        minutes=1, 
+        sync_all_prices,
+        'interval',
+        minutes=5,
         id='sync_all_prices_job',
-        replace_existing=True
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
     )
     # 設定每 1 小時記錄一次淨值 (save_net_worth_snapshot 會自動處理當日更新)
     scheduler.add_job(

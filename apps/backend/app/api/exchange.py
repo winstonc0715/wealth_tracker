@@ -10,7 +10,7 @@ from app.database import get_db
 from app.api.auth import get_current_user
 from app.models.user import User
 from app.schemas.common import ApiResponse
-from app.price.manager import PriceManager
+from app.price.manager import get_price_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/portfolio/exchange-rates", tags=["匯率"])
@@ -30,7 +30,7 @@ async def get_exchange_rates(
     }
     """
     try:
-        manager = PriceManager()
+        manager = get_price_manager()
         # 從 Yahoo Finance 抓取 USD/TWD 匯率 (代碼 TWD=X)
         # 由於 yfinance 的 TWD=X 報價代表 1 USD 換多少 TWD
         price_data = await manager.get_price("TWD=X", "us_stock")

@@ -298,3 +298,27 @@ class PriceManager:
         for provider in self._providers.values():
             if hasattr(provider, "close"):
                 await provider.close()
+
+
+# === 全程序共用單例 ===
+# 每個請求 new 一個 PriceManager 會：
+# 1. 洩漏 provider 內的 httpx 連線（多數呼叫端沒 close）
+# 2. 讓 singleflight 防擊穿失效（_fetching 只在單一實例內共享）
+# 統一改用共用實例，於應用程式 shutdown 時關閉。
+_shared_manager: "PriceManager | None" = None
+
+
+def get_price_manager() -> "PriceManager":
+    """取得全程序共用的 PriceManager 實例"""
+    global _shared_manager
+    if _shared_manager is None:
+        _shared_manager = PriceManager()
+    return _shared_manager
+
+
+async def close_price_manager() -> None:
+    """關閉共用實例（應用程式 shutdown 時呼叫）"""
+    global _shared_manager
+    if _shared_manager is not None:
+        await _shared_manager.close()
+        _shared_manager = None

@@ -14,7 +14,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.models.user import User
 from app.models.portfolio import Portfolio
-from app.price.manager import PriceManager
+from app.price.manager import PriceManager, get_price_manager
 from app.services.portfolio_service import PortfolioService
 from app.schemas.common import ApiResponse
 from app.schemas.portfolio import (
@@ -31,7 +31,7 @@ settings = get_settings()
 
 def _get_portfolio_service(db: AsyncSession) -> PortfolioService:
     """建立 PortfolioService 實例"""
-    return PortfolioService(db, PriceManager())
+    return PortfolioService(db, get_price_manager())
 
 
 @router.get("/", response_model=ApiResponse[list[PortfolioResponse]])
@@ -78,7 +78,7 @@ async def search_symbols(
     
     支援依據資產類別 (us_stock, tw_stock, crypto 等) 進行即時模糊搜尋。若傳入 'all' 則會並行查詢所有支援的類別。
     """
-    manager = PriceManager()
+    manager = get_price_manager()
     try:
         results = await manager.search_symbol(query=query, category_slug=category_slug)
         # 將 dataclass 轉為 dict 回傳
@@ -95,8 +95,6 @@ async def search_symbols(
     except Exception as e:
         logger.error(f"搜尋標的失敗: {e}")
         return ApiResponse(data=[])
-    finally:
-        await manager.close()
 
 
 @router.get("/market-detail", response_model=ApiResponse[dict])
@@ -108,7 +106,7 @@ async def get_market_detail(
     """取得標的市場詳情（多時段漲跌、52W、PE 等）"""
     from dataclasses import asdict
 
-    manager = PriceManager()
+    manager = get_price_manager()
     try:
         detail = await manager.get_market_detail(symbol, category_slug)
         return ApiResponse(data=asdict(detail))
@@ -360,7 +358,7 @@ async def debug_portfolio_history(
 
     today = taipei_today()
     start_date = today - timedelta(days=days - 1)
-    manager = PriceManager()
+    manager = get_price_manager()
 
     # 1. 查快照覆蓋情況
     stmt = (
@@ -427,7 +425,6 @@ async def debug_portfolio_history(
         except Exception as e:
             price_debug[sym] = {"status": "error", "error": str(e)}
 
-    await manager.close()
 
     return ApiResponse(data={
         "portfolio_id": portfolio_id,

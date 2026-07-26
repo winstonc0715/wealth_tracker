@@ -51,6 +51,8 @@ async def lifespan(app: FastAPI):
     # === 關閉時 ===
     logger.info("WealthTracker API 關閉中...")
     stop_worker()
+    from app.price.manager import close_price_manager
+    await close_price_manager()
     await close_redis()
     await engine.dispose()
     logger.info("👋 WealthTracker API 已關閉")

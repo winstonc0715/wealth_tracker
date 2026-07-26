@@ -10,6 +10,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    Index,
     String, Integer, DateTime, Numeric,
     ForeignKey, Enum, func,
 )
@@ -30,6 +31,12 @@ class TransactionType(str, enum.Enum):
 
 class Transaction(Base):
     __tablename__ = "transactions"
+
+    # 常用查詢組合：重算持倉 (portfolio_id, symbol)、分頁排序 (portfolio_id, executed_at)
+    __table_args__ = (
+        Index("ix_transactions_portfolio_symbol", "portfolio_id", "symbol"),
+        Index("ix_transactions_portfolio_executed", "portfolio_id", "executed_at"),
+    )
 
     id: Mapped[str] = mapped_column(
         String(36),

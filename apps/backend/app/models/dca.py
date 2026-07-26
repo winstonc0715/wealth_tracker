@@ -53,6 +53,7 @@ class DCASchedule(Base):
         String(36),
         ForeignKey("portfolios.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
     symbol: Mapped[str] = mapped_column(
         String(20), nullable=False,

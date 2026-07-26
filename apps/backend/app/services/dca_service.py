@@ -29,7 +29,7 @@ from app.schemas.dca import (
 )
 from app.schemas.transaction import TransactionCreate, TransactionUpdate
 from app.services.transaction_service import TransactionService
-from app.price.manager import PriceManager
+from app.price.manager import PriceManager, get_price_manager
 
 logger = logging.getLogger(__name__)
 
@@ -715,22 +715,19 @@ class DCAService:
         schedules = result.scalars().all()
 
         stats["checked"] = len(schedules)
-        manager = PriceManager()
+        manager = get_price_manager()
 
-        try:
-            for schedule in schedules:
-                try:
-                    await self._process_single_schedule(
-                        schedule, today, manager, stats,
-                    )
-                except Exception as e:
-                    error_msg = (
-                        f"排程 {schedule.id} ({schedule.symbol}) 執行失敗: {e}"
-                    )
-                    logger.error(error_msg)
-                    stats["errors"].append(error_msg)
-        finally:
-            await manager.close()
+        for schedule in schedules:
+            try:
+                await self._process_single_schedule(
+                    schedule, today, manager, stats,
+                )
+            except Exception as e:
+                error_msg = (
+                    f"排程 {schedule.id} ({schedule.symbol}) 執行失敗: {e}"
+                )
+                logger.error(error_msg)
+                stats["errors"].append(error_msg)
 
         return stats
 

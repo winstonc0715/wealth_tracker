@@ -24,6 +24,18 @@ _memory_cache: dict[str, tuple[Any, float]] = {}
 _stale_cache: dict[str, tuple[Any, float]] = {}
 _STALE_TTL = 86400  # 24 小時
 
+# 記憶體快取上限：超過即淘汰最早過期的項目，避免無上限成長
+_MAX_MEMORY_ENTRIES = 2000
+
+
+def _evict_if_needed(cache: dict[str, tuple[Any, float]]) -> None:
+    """快取超過上限時，淘汰最早過期的 10%"""
+    if len(cache) <= _MAX_MEMORY_ENTRIES:
+        return
+    evict_count = max(1, _MAX_MEMORY_ENTRIES // 10)
+    for key in sorted(cache, key=lambda k: cache[k][1])[:evict_count]:
+        cache.pop(key, None)
+
 
 async def get_redis():
     """取得 Redis 連線，若不可用則返回 None"""
@@ -132,6 +144,8 @@ async def cache_set(key: str, value: Any, ttl: int | None = None) -> None:
     _memory_cache[key] = (value, time.time() + ttl)
     # stale 備份（24 小時）
     _stale_cache[key] = (value, time.time() + _STALE_TTL)
+    _evict_if_needed(_memory_cache)
+    _evict_if_needed(_stale_cache)
 
 
 async def cache_delete(key: str) -> None:
