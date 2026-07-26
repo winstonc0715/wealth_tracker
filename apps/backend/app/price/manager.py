@@ -285,10 +285,27 @@ class PriceManager:
         for res in all_results:
             if isinstance(res, list):
                 final_results.extend(res)
-                
-        # 簡單排序：讓精確比對的排前面 (選做)
-        # return sorted(final_results, key=lambda x: 0 if x.symbol.upper() == query.upper() else 1)
-        return final_results
+
+        # 相關性排序：精確代號 > 去掉後綴後精確（ETH-USD 的 ETH）>
+        # 前綴符合 > 名稱包含 > 其他；同分者代號短的在前
+        q = query.upper().strip()
+
+        def _rank(r: SearchResult) -> tuple:
+            sym = (r.symbol or "").upper()
+            base = sym.split("-")[0].split(".")[0]
+            if sym == q:
+                score = 0
+            elif base == q:
+                score = 1
+            elif sym.startswith(q) or base.startswith(q):
+                score = 2
+            elif q in (r.name or "").upper():
+                score = 3
+            else:
+                score = 4
+            return (score, len(sym))
+
+        return sorted(final_results, key=_rank)
 
     async def _search_with_slug(self, provider, query: str, slug: str) -> list[SearchResult]:
         try:
