@@ -254,8 +254,12 @@ async def get_portfolio_history(
         history = await service.get_history(portfolio_id, days, force_refresh)
         return ApiResponse(data=history)
     except Exception as e:
-        logger.error("取得歷史淨值失敗: %s", e)
-        raise HTTPException(status_code=500, detail="取得歷史淨值失敗，請稍後再試")
+        # 完整堆疊進 log；detail 僅帶例外類型協助遠端診斷
+        logger.exception("取得歷史淨值失敗")
+        raise HTTPException(
+            status_code=500,
+            detail=f"取得歷史淨值失敗（{type(e).__name__}），請稍後再試",
+        )
 
 
 @router.patch("/{portfolio_id}/positions/{symbol}", response_model=ApiResponse[dict])

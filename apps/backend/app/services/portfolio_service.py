@@ -5,14 +5,15 @@
 """
 
 import logging
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.utils.timezone import taipei_today
 from app.models.portfolio import Portfolio
+from app.models.transaction import Transaction
 from app.models.position import CurrentPosition
 from app.models.asset_category import AssetCategory
 from app.models.net_worth import HistoricalNetWorth
@@ -83,8 +84,6 @@ class PortfolioService:
 
         # 取得累計已實現損益：按交易幣別分組後換算為 TWD 加總
         # （排除負債類交易：還款沖減不是損益事件）
-        from app.models.transaction import Transaction
-        from sqlalchemy import func
         pnl_stmt = (
             select(Transaction.currency, func.sum(Transaction.realized_pnl))
             .join(AssetCategory, Transaction.category_id == AssetCategory.id)
@@ -287,9 +286,7 @@ class PortfolioService:
         若 HistoricalNetWorth 快照充足則直接使用；否則啟動「歷史淨值回溯引擎」，
         將過去所有交易紀錄逐日回放，並乘上當天個股的真實歷史收盤價，精確還原歷史波段。
         """
-        from datetime import date, timedelta
         from sqlalchemy.orm import selectinload
-        from app.models.transaction import Transaction
         from app.models.asset_category import AssetCategory
 
         today = taipei_today()
@@ -349,6 +346,42 @@ class PortfolioService:
                 ))
             return PortfolioHistoryResponse(portfolio_id=portfolio_id, history=history)
 
+        # 回溯引擎失敗時降級回快照序列（部分歷史仍可顯示），不讓整張圖 500
+        try:
+            return await self._replay_history(
+                portfolio_id, days, start_date, today, record_map, liab_map,
+            )
+        except Exception:
+            logger.exception("歷史回溯引擎失敗，退回快照序列")
+            history = []
+            last_val: Decimal | None = None
+            last_liab = Decimal("0")
+            for i in range(days):
+                d = start_date + timedelta(days=i)
+                if d in record_map:
+                    last_val = record_map[d]
+                    last_liab = liab_map.get(d, Decimal("0"))
+                history.append(NetWorthHistoryItem(
+                    date=f"{d.month}/{d.day}",
+                    value=last_val if last_val is not None else Decimal("0"),
+                    assets=(
+                        (last_val + last_liab)
+                        if last_val is not None else Decimal("0")
+                    ),
+                ))
+            return PortfolioHistoryResponse(
+                portfolio_id=portfolio_id, history=history,
+            )
+
+    async def _replay_history(
+        self,
+        portfolio_id: str,
+        days: int,
+        start_date,
+        today,
+        record_map: dict,
+        liab_map: dict,
+    ) -> PortfolioHistoryResponse:
         # ====================
         # 啟動歷史淨值回溯引擎
         # ====================
