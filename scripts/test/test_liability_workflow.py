@@ -316,6 +316,30 @@ async def main() -> None:
         assert (await service.get_liability(demo_user.id, li3.id)).is_active is True
         print("✅ 情境 11：餘額校正 → 對齊指定金額、還款統計不變、結清狀態正確")
 
+        # === 12. 負債部位不產生損益、入帳日=撥款日 ===
+        li3_txs = (await session.execute(
+            select(Transaction).where(Transaction.symbol == li3.symbol)
+        )).scalars().all()
+        deposit_tx = next(
+            t for t in li3_txs if t.note and t.note.startswith("建立負債")
+        )
+        assert deposit_tx.executed_at.date() == date(2025, 1, 17), \
+            "入帳交易日期應為撥款日"
+        # 全量重算後：所有負債交易 realized_pnl=0、平均成本固定 1
+        await tx_service.recalculate_position(p.id, li3.symbol)
+        li3_txs = (await session.execute(
+            select(Transaction).where(Transaction.symbol == li3.symbol)
+        )).scalars().all()
+        assert all(
+            (t.realized_pnl or Decimal("0")) == Decimal("0") for t in li3_txs
+        ), "負債交易不應有已實現損益"
+        pos3 = (await session.execute(
+            select(CurrentPosition).where(CurrentPosition.symbol == li3.symbol)
+        )).scalar_one()
+        assert pos3.avg_cost == Decimal("1"), f"負債平均成本應為 1，實際 {pos3.avg_cost}"
+        assert pos3.total_quantity == Decimal("72500")
+        print("✅ 情境 12：負債部位無損益、成本固定 1、入帳日=撥款日")
+
     print("\n🎉 全部通過")
 
 

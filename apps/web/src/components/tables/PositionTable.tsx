@@ -21,7 +21,12 @@ const CATEGORY_ICONS: Record<string, string> = {
     liability: '💳',
 };
 
-export default function PositionTable({ positions, onQuickTrade, onEdit }: PositionTableProps) {
+export default function PositionTable({ positions: allPositions, onQuickTrade, onEdit }: PositionTableProps) {
+    // 負債部位在「負債管理」頁呈現，不列入持倉明細
+    const positions = useMemo(
+        () => allPositions.filter((p) => p.category_slug !== 'liability'),
+        [allPositions],
+    );
     const [flashMap, setFlashMap] = useState<Record<string, 'up' | 'down'>>({});
     const prevPricesRef = useRef<Record<string, number>>({});
     const [sortColumn, setSortColumn] = useState<SortColumn>('total_value');

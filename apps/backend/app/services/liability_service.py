@@ -125,7 +125,13 @@ class LiabilityService:
                 unit_price=Decimal("1"),
                 fee=Decimal("0"),
                 currency=data.currency,
-                executed_at=datetime.now(timezone.utc),
+                # 入帳日用撥款日，確保早於任何回填的還款交易
+                executed_at=(
+                    datetime.combine(
+                        data.start_date, datetime.min.time(), tzinfo=timezone.utc
+                    )
+                    if data.start_date else datetime.now(timezone.utc)
+                ),
                 note=f"建立負債「{data.name}」",
             ))
 

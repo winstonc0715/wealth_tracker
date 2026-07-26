@@ -65,11 +65,14 @@ class PortfolioService:
         positions = result.scalars().all()
 
         # 取得累計已實現損益 (加總所有交易的 realized_pnl)
+        # 排除負債類交易：還款沖減不是損益事件
         from app.models.transaction import Transaction
         from sqlalchemy import func
         pnl_stmt = (
             select(func.sum(Transaction.realized_pnl))
+            .join(AssetCategory, Transaction.category_id == AssetCategory.id)
             .where(Transaction.portfolio_id == portfolio_id)
+            .where(AssetCategory.slug != "liability")
         )
         pnl_result = await self.db.execute(pnl_stmt)
         total_realized_pnl = pnl_result.scalar() or Decimal("0")
@@ -122,12 +125,12 @@ class PortfolioService:
             unrealized_pnl_twd = unrealized_pnl_native * twd_multiplier
 
             # 區分資產與負債加總 (使用 TWD 價值)
+            # 負債部位不計入未實現損益（單價固定 1，無市價波動）
             if category_slug == "liability":
                 total_liabilities += total_value_twd
             else:
                 total_assets += total_value_twd
-
-            total_unrealized_pnl += unrealized_pnl_twd
+                total_unrealized_pnl += unrealized_pnl_twd
 
             # 明細保留原幣顯示 (供前端顯示)
             position_details.append(PositionDetail(

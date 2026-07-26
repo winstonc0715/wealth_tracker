@@ -289,11 +289,39 @@ class TransactionService:
         # 3. 循序計算
         current_qty = Decimal("0")
         current_avg_cost = Decimal("0")
-        
+
         # 紀錄第一個交易的 category_id 做為持倉預設
         category_id = txs[0].category_id
         asset_name = txs[0].asset_name
         currency = txs[0].currency
+
+        # 負債部位：單價固定 1、還款沖減不是損益事件，
+        # 直接以存提差額計算數量（與交易順序無關）
+        from app.models.asset_category import AssetCategory
+        slug = (await self.db.execute(
+            select(AssetCategory.slug).where(AssetCategory.id == category_id)
+        )).scalar_one_or_none()
+        if slug == "liability":
+            for tx in txs:
+                tx.realized_pnl = Decimal("0")
+                if tx.tx_type in (TransactionType.BUY, TransactionType.DEPOSIT):
+                    current_qty += tx.quantity
+                elif tx.tx_type in (TransactionType.SELL, TransactionType.WITHDRAW):
+                    current_qty -= tx.quantity
+            current_avg_cost = Decimal("1")
+            if not position:
+                position = CurrentPosition(
+                    portfolio_id=portfolio_id,
+                    symbol=symbol,
+                    category_id=category_id,
+                    name=asset_name,
+                    currency=currency,
+                )
+                self.db.add(position)
+            position.total_quantity = current_qty
+            position.avg_cost = current_avg_cost
+            position.updated_at = func.now()
+            return
 
         for tx in txs:
             if tx.tx_type in (TransactionType.BUY, TransactionType.DEPOSIT):
