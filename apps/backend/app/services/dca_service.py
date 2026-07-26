@@ -12,6 +12,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.utils.timezone import taipei_today
 from app.models.dca import (
     DCASchedule, DCAExecution,
     InvestmentType, ExecutionStatus,
@@ -688,7 +689,7 @@ class DCAService:
         7. 建立 DCAExecution
         8. auto_confirm 的直接建立交易
         """
-        today = date.today()
+        today = taipei_today()
         stats = {
             "date": str(today),
             "checked": 0,

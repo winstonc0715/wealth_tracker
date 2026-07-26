@@ -42,7 +42,12 @@ class User(Base):
     )
 
     # 關聯：一個用戶擁有多個投資組合
-    portfolios = relationship("Portfolio", back_populates="user", lazy="selectin")
+    # lazy="raise"：get_current_user 每個請求都會 db.get(User)，
+    # selectin 會連帶載入所有組合（再連鎖載入其集合）。按需查詢即可。
+    portfolios = relationship(
+        "Portfolio", back_populates="user",
+        lazy="raise", passive_deletes=True,
+    )
 
     def __repr__(self) -> str:
         return f"<User {self.email}>"

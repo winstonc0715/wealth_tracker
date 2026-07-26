@@ -7,7 +7,7 @@
 import logging
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -86,8 +86,8 @@ async def create_transaction(
 )
 async def get_transactions(
     portfolio_id: str,
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -241,12 +241,11 @@ async def delete_transaction(
     except ValueError as e:
         await db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
+    except Exception:
         await db.rollback()
-        import traceback
-        err_msg = traceback.format_exc()
+        # 完整堆疊只進伺服器 log，不回傳給客戶端
         logger.exception(f"刪除交易失敗: {tx_id}")
-        raise HTTPException(status_code=400, detail=f"刪除失敗內部錯誤: {str(e)}\n\nTraceback:\n{err_msg}")
+        raise HTTPException(status_code=500, detail="刪除交易失敗，請稍後再試")
 
 # === 券商同步路由 ===
 
@@ -270,9 +269,20 @@ async def import_csv(
     if not portfolio or portfolio.user_id != user.id:
         raise HTTPException(status_code=404, detail="投資組合不存在")
 
-    # 讀取 CSV 內容
+    # 讀取 CSV 內容（限制 5MB，避免整檔讀入記憶體被濫用）
     content = await file.read()
-    csv_text = content.decode("utf-8-sig")  # 支援 BOM
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="檔案過大（上限 5MB）")
+    try:
+        csv_text = content.decode("utf-8-sig")  # 支援 BOM
+    except UnicodeDecodeError:
+        try:
+            csv_text = content.decode("big5")  # 部分券商匯出為 Big5
+        except UnicodeDecodeError:
+            raise HTTPException(
+                status_code=400,
+                detail="無法解析檔案編碼，請先另存為 UTF-8 CSV",
+            )
 
     # 解析 CSV
     try:

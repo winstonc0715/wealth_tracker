@@ -11,6 +11,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.utils.timezone import taipei_today
 from app.models.portfolio import Portfolio
 from app.models.position import CurrentPosition
 from app.models.asset_category import AssetCategory
@@ -71,19 +72,6 @@ class PortfolioService:
         result = await self.db.execute(stmt)
         positions = result.scalars().all()
 
-        # 取得累計已實現損益 (加總所有交易的 realized_pnl)
-        # 排除負債類交易：還款沖減不是損益事件
-        from app.models.transaction import Transaction
-        from sqlalchemy import func
-        pnl_stmt = (
-            select(func.sum(Transaction.realized_pnl))
-            .join(AssetCategory, Transaction.category_id == AssetCategory.id)
-            .where(Transaction.portfolio_id == portfolio_id)
-            .where(AssetCategory.slug != "liability")
-        )
-        pnl_result = await self.db.execute(pnl_stmt)
-        total_realized_pnl = pnl_result.scalar() or Decimal("0")
-
         # 取得 USD 匯率以統一轉為 TWD 計算
         usd_twd_rate = Decimal("32.0")
         try:
@@ -92,6 +80,24 @@ class PortfolioService:
                 usd_twd_rate = rate_data.price
         except Exception as e:
             logger.warning("取得匯率失敗，使用預設值 32.0: %s", e)
+
+        # 取得累計已實現損益：按交易幣別分組後換算為 TWD 加總
+        # （排除負債類交易：還款沖減不是損益事件）
+        from app.models.transaction import Transaction
+        from sqlalchemy import func
+        pnl_stmt = (
+            select(Transaction.currency, func.sum(Transaction.realized_pnl))
+            .join(AssetCategory, Transaction.category_id == AssetCategory.id)
+            .where(Transaction.portfolio_id == portfolio_id)
+            .where(AssetCategory.slug != "liability")
+            .group_by(Transaction.currency)
+        )
+        total_realized_pnl = Decimal("0")
+        for tx_currency, amount in (await self.db.execute(pnl_stmt)).all():
+            if amount is None:
+                continue
+            mult = usd_twd_rate if (tx_currency or "").upper() == "USD" else Decimal("1")
+            total_realized_pnl += amount * mult
 
         # 批次取得報價
         price_items = [
@@ -127,7 +133,12 @@ class PortfolioService:
             ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
             # TWD 等值計算 (用於總資產、淨值加總)
-            twd_multiplier = usd_twd_rate if category_slug in ("us_stock", "crypto") else Decimal("1")
+            # 以部位「幣別」決定匯率，而非資產類別：
+            # 美元現金（fiat/USD）、美元負債也要正確換算
+            native_currency = (pos.currency or "").upper() or (
+                "USD" if category_slug in ("us_stock", "crypto") else "TWD"
+            )
+            twd_multiplier = usd_twd_rate if native_currency == "USD" else Decimal("1")
             total_value_twd = total_value_native * twd_multiplier
             unrealized_pnl_twd = unrealized_pnl_native * twd_multiplier
 
@@ -151,7 +162,7 @@ class PortfolioService:
                 total_cost=total_cost_native,
                 unrealized_pnl=unrealized_pnl_native,
                 unrealized_pnl_pct=pnl_pct,
-                currency=pos.currency if pos.currency else ("USD" if category_slug in ("us_stock", "crypto") else "TWD"),
+                currency=native_currency,
                 price_change_24h_pct=price_data.change_pct_24h if price_data else None,
                 total_value_base=total_value_twd,
                 unrealized_pnl_base=unrealized_pnl_twd,
@@ -180,16 +191,7 @@ class PortfolioService:
         """
         summary = await self.get_summary(portfolio_id, force_refresh)
 
-        # 取得 USD 匯率以統一轉為 TWD 計算
-        usd_twd_rate = Decimal("32.0")
-        try:
-            rate_data = await self.price_manager.get_price("TWD=X", "us_stock", force_refresh=force_refresh)
-            if rate_data.price > 0:
-                usd_twd_rate = rate_data.price
-        except Exception as e:
-            logger.warning("取得匯率失敗，使用預設值 32.0: %s", e)
-
-        # 按類別聚合
+        # 按類別聚合（summary 已依部位幣別換算好 TWD 值，直接使用）
         category_values: dict[str, Decimal] = {}
         category_names: dict[str, str] = {}
 
@@ -197,11 +199,7 @@ class PortfolioService:
             if pos.category_slug == "liability":
                 continue  # 負債不計入配置
             slug = pos.category_slug
-            
-            # 使用 TWD 價值來加總比例
-            twd_multiplier = usd_twd_rate if slug in ("us_stock", "crypto") else Decimal("1")
-            value_twd = pos.total_value * twd_multiplier
-            
+            value_twd = pos.total_value_base
             category_values[slug] = category_values.get(slug, Decimal("0")) + value_twd
 
             # 取得類別中文名
@@ -237,10 +235,8 @@ class PortfolioService:
         """
         儲存每日淨值快照（供排程呼叫）
         """
-        from datetime import date as date_type
-
         summary = await self.get_summary(portfolio_id)
-        today = date_type.today()
+        today = taipei_today()
 
         # 查詢是否已有今日快照
         stmt = (
@@ -296,7 +292,7 @@ class PortfolioService:
         from app.models.transaction import Transaction
         from app.models.asset_category import AssetCategory
 
-        today = date.today()
+        today = taipei_today()
         start_date = today - timedelta(days=days-1)
 
         # 若強制刷新，先清除所有既有快照以強制重算
@@ -443,6 +439,17 @@ class PortfolioService:
         total_txs = len(tx_records)
         history = []
 
+        # 各標的的計價幣別（取自交易紀錄，用於 TWD 換算）
+        symbol_currency: dict[str, str] = {}
+        for tx, _slug in tx_records:
+            symbol_currency.setdefault(tx.symbol, (tx.currency or "").upper())
+
+        def _fx_mult(sym: str, slug: str) -> Decimal:
+            currency = symbol_currency.get(sym) or (
+                "USD" if slug in ("us_stock", "crypto") else "TWD"
+            )
+            return usd_twd_rate if currency == "USD" else Decimal("1")
+
         # 在這 N 天之前，先把以前的交易執行完，為庫存打底
         while tx_idx < total_txs and tx_records[tx_idx][0].executed_at.date() < start_date:
             tx, slug = tx_records[tx_idx]
@@ -476,13 +483,13 @@ class PortfolioService:
                 if qty == 0: continue
 
                 if slug == "liability":
-                    daily_liabilities += qty
+                    daily_liabilities += qty * _fx_mult(sym, slug)
                 elif slug == "fiat":
-                    daily_assets += qty
+                    # 外幣現金也要換算（例如 USD 現金部位）
+                    daily_assets += qty * _fx_mult(sym, slug)
                 else:
                     price = get_price_for_date(sym, current_date)
-                    mult = usd_twd_rate if slug in ("us_stock", "crypto") else Decimal("1")
-                    daily_assets += (qty * price * mult)
+                    daily_assets += (qty * price * _fx_mult(sym, slug))
 
             daily_net_worth = daily_assets - daily_liabilities
 

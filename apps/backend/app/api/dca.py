@@ -8,10 +8,11 @@ import logging
 from datetime import date, timedelta
 
 from fastapi import (
-    APIRouter, Depends, File, Form, HTTPException, Response, UploadFile,
+    APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.utils.timezone import taipei_today
 from app.database import get_db
 from app.models.user import User
 from app.models.portfolio import Portfolio
@@ -83,7 +84,7 @@ def _calculate_next_execution_date(
     if not is_active or not execution_days:
         return None
 
-    today = date.today()
+    today = taipei_today()
     # 搜尋未來 62 天內最近的執行日（跨月考量）
     for delta in range(1, 63):
         candidate = today + timedelta(days=delta)
@@ -251,8 +252,8 @@ async def get_pending_executions(
     response_model=ApiResponse[PaginatedResponse[DCAExecutionResponse]],
 )
 async def get_execution_history(
-    page: int = 1,
-    page_size: int = 20,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -424,7 +425,7 @@ async def preview_dca_csv(
     except Exception as e:
         await db.rollback()
         logger.exception("定期定額匯入預覽失敗")
-        raise HTTPException(status_code=500, detail=f"預覽失敗: {str(e)}")
+        raise HTTPException(status_code=500, detail="預覽失敗，請稍後再試")
 
     # dry-run：無論結果如何都不落地
     await db.rollback()
@@ -493,7 +494,7 @@ async def import_dca_csv(
     except Exception as e:
         await db.rollback()
         logger.exception("定期定額匯入失敗")
-        raise HTTPException(status_code=500, detail=f"匯入失敗: {str(e)}")
+        raise HTTPException(status_code=500, detail="匯入失敗，請稍後再試")
 
 
 @dca_router.post(
@@ -504,7 +505,10 @@ async def execute_now(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """手動觸發今日定期定額排程（除錯用）"""
+    """手動觸發今日定期定額排程（除錯用；會執行全站排程，僅限管理員）"""
+    from app.config import get_settings
+    if user.email not in get_settings().admin_email_list:
+        raise HTTPException(status_code=403, detail="僅限管理員執行")
     service = DCAService(db)
     try:
         result = await service.execute_pending_schedules()

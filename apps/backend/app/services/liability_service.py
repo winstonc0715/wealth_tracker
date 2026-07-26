@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.utils.timezone import taipei_today
 from app.models.asset_category import AssetCategory
 from app.models.liability import Liability, LiabilityPayment, PaymentCycle
 from app.models.position import CurrentPosition
@@ -217,7 +218,7 @@ class LiabilityService:
     ) -> LiabilityPayment:
         """記錄一筆還款：沖減持倉 + 建立還款紀錄"""
         liability = await self._get_user_liability(user_id, liability_id)
-        pay_date = data.payment_date or date.today()
+        pay_date = data.payment_date or taipei_today()
 
         tx_service = TransactionService(self.db)
         tx = await tx_service.create_transaction(TransactionCreate(
@@ -403,7 +404,7 @@ class LiabilityService:
     ) -> BackfillPreview:
         """預覽依日期推算的待補登期數與金額（不寫入）"""
         liability = await self._get_user_liability(user_id, liability_id)
-        as_of = as_of or date.today()
+        as_of = as_of or taipei_today()
         expected = _expected_periods(liability, as_of)
         paid = len(liability.payments)
 
@@ -444,7 +445,7 @@ class LiabilityService:
         且以列鎖序列化並發請求。
         """
         liability = await self._get_user_liability_locked(user_id, liability_id)
-        as_of = as_of or date.today()
+        as_of = as_of or taipei_today()
         expected = _expected_periods(liability, as_of)
         paid = len(liability.payments)
         if expected <= paid:
@@ -570,7 +571,7 @@ class LiabilityService:
         resp.outstanding_balance = outstanding
         resp.paid_amount = paid_amount
         resp.paid_periods = paid_periods
-        resp.expected_periods = _expected_periods(liability, date.today())
+        resp.expected_periods = _expected_periods(liability, taipei_today())
         resp.progress_pct = round(progress, 2)
         resp.next_payment_date = next_payment
         resp.payments = [

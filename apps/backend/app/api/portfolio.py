@@ -5,10 +5,11 @@
 """
 
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.utils.timezone import taipei_today
 from app.config import get_settings
 from app.database import get_db
 from app.models.user import User
@@ -113,7 +114,7 @@ async def get_market_detail(
         return ApiResponse(data=asdict(detail))
     except Exception as e:
         logger.error("取得市場詳情失敗: %s", e)
-        raise HTTPException(status_code=500, detail=f"取得市場詳情失敗: {e}")
+        raise HTTPException(status_code=500, detail="取得市場詳情失敗，請稍後再試")
 
 
 @router.get("/{portfolio_id}", response_model=ApiResponse[PortfolioResponse])
@@ -192,7 +193,7 @@ async def get_portfolio_summary(
         return ApiResponse(data=summary)
     except Exception as e:
         logger.error("計算淨值失敗: %s", e)
-        raise HTTPException(status_code=500, detail=f"計算淨值失敗: {e}")
+        raise HTTPException(status_code=500, detail="計算淨值失敗，請稍後再試")
 
 
 
@@ -224,7 +225,7 @@ async def get_allocations(
         return ApiResponse(data=allocations)
     except Exception as e:
         logger.error("計算配置失敗: %s", e)
-        raise HTTPException(status_code=500, detail=f"計算配置失敗: {e}")
+        raise HTTPException(status_code=500, detail="計算配置失敗，請稍後再試")
 
 
 @router.get(
@@ -233,7 +234,7 @@ async def get_allocations(
 )
 async def get_portfolio_history(
     portfolio_id: str,
-    days: int = 30,
+    days: int = Query(30, ge=1, le=1825),
     force_refresh: bool = False,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -256,7 +257,7 @@ async def get_portfolio_history(
         return ApiResponse(data=history)
     except Exception as e:
         logger.error("取得歷史淨值失敗: %s", e)
-        raise HTTPException(status_code=500, detail=f"取得歷史淨值失敗: {e}")
+        raise HTTPException(status_code=500, detail="取得歷史淨值失敗，請稍後再試")
 
 
 @router.patch("/{portfolio_id}/positions/{symbol}", response_model=ApiResponse[dict])
@@ -285,7 +286,7 @@ async def update_position_asset(
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error("修改持倉標的失敗: %s", e)
-        raise HTTPException(status_code=500, detail=f"修改持倉標的失敗: {e}")
+        raise HTTPException(status_code=500, detail="修改持倉標的失敗，請稍後再試")
 
     return ApiResponse(
         data={
@@ -328,13 +329,13 @@ async def trigger_snapshot(
         }, message="快照已儲存")
     except Exception as e:
         logger.error("手動快照失敗: %s", e)
-        raise HTTPException(status_code=500, detail=f"快照儲存失敗: {e}")
+        raise HTTPException(status_code=500, detail="快照儲存失敗，請稍後再試")
 
 
 @router.get("/{portfolio_id}/history-debug", response_model=ApiResponse[dict])
 async def debug_portfolio_history(
     portfolio_id: str,
-    days: int = 7,
+    days: int = Query(7, ge=1, le=90),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -357,7 +358,7 @@ async def debug_portfolio_history(
     if not portfolio or portfolio.user_id != user.id:
         raise HTTPException(status_code=404, detail="投資組合不存在")
 
-    today = date.today()
+    today = taipei_today()
     start_date = today - timedelta(days=days - 1)
     manager = PriceManager()
 

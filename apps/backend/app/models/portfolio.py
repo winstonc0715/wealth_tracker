@@ -34,15 +34,22 @@ class Portfolio(Base):
     )
 
     # 關聯
+    # lazy="raise"：這些集合會隨歷史成長到數千筆，原本的 selectin
+    # 讓「每個請求的身份驗證/歸屬檢查」都把全部交易與快照撈進記憶體。
+    # 服務層一律以明確 select 查詢，誤觸集合屬性時直接報錯提醒。
+    # passive_deletes：刪除投資組合交由 DB 的 ondelete CASCADE 處理。
     user = relationship("User", back_populates="portfolios")
     transactions = relationship(
-        "Transaction", back_populates="portfolio", lazy="selectin"
+        "Transaction", back_populates="portfolio",
+        lazy="raise", passive_deletes=True,
     )
     positions = relationship(
-        "CurrentPosition", back_populates="portfolio", lazy="selectin"
+        "CurrentPosition", back_populates="portfolio",
+        lazy="raise", passive_deletes=True,
     )
     net_worth_history = relationship(
-        "HistoricalNetWorth", back_populates="portfolio", lazy="selectin"
+        "HistoricalNetWorth", back_populates="portfolio",
+        lazy="raise", passive_deletes=True,
     )
 
     def __repr__(self) -> str:
