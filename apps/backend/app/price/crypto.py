@@ -75,7 +75,11 @@ class CryptoProvider(PriceProvider):
         return coin_id
 
     async def get_current_price(self, symbol: str) -> PriceData:
-        """取得加密貨幣即時報價"""
+        """取得加密貨幣即時報價。
+
+        主來源 CoinGecko；失敗時退回 yfinance（SYMBOL-USD）——
+        CoinGecko 免費 API 對資料中心 IP（如 Render）常有封鎖/限流。
+        """
         coin_id = self._get_coin_id(symbol)
         try:
             response = await self._client.get(
@@ -101,8 +105,47 @@ class CryptoProvider(PriceProvider):
                 change_pct_24h=Decimal(str(coin_data.get("usd_24h_change", 0))),
                 source="coingecko",
             )
-        except httpx.HTTPError as e:
-            raise ProviderError(f"CoinGecko API 錯誤: {e}") from e
+        except (httpx.HTTPError, PriceNotFoundError) as e:
+            logger.warning("CoinGecko 報價失敗（%s），改用 yfinance: %s", symbol, e)
+            return await self._yfinance_fallback(symbol)
+
+    async def _yfinance_fallback(self, symbol: str) -> PriceData:
+        """以 yfinance 取得 SYMBOL-USD 的加密貨幣報價"""
+        import asyncio
+
+        base = symbol.upper()
+        for suffix in ("-USD", "-USDT", "-TWD"):
+            if base.endswith(suffix):
+                base = base[: -len(suffix)]
+                break
+
+        def _fetch() -> PriceData:
+            import yfinance as yf
+            ticker = yf.Ticker(f"{base}-USD")
+            info = ticker.fast_info
+            price = info.get("lastPrice") or info.get("last_price")
+            if not price or price <= 0:
+                raise ProviderError(f"yfinance 無 {base}-USD 報價")
+            prev = info.get("previousClose") or info.get("previous_close")
+            change = (
+                Decimal(str((price - prev) / prev * 100)) if prev else None
+            )
+            return PriceData(
+                symbol=symbol.upper(),
+                price=Decimal(str(price)),
+                currency="USD",
+                timestamp=datetime.now(),
+                change_pct_24h=change,
+                source="yfinance",
+            )
+
+        loop = asyncio.get_event_loop()
+        try:
+            return await loop.run_in_executor(None, _fetch)
+        except ProviderError:
+            raise
+        except Exception as e:
+            raise ProviderError(f"yfinance 加密貨幣報價失敗: {e}") from e
 
     async def get_market_detail(self, symbol: str) -> "MarketDetail":
         """取得加密貨幣市場詳情（含 52W 高低點）"""
@@ -189,7 +232,49 @@ class CryptoProvider(PriceProvider):
                 ))
             return prices
         except httpx.HTTPError as e:
-            raise ProviderError(f"CoinGecko 歷史報價錯誤: {e}") from e
+            logger.warning(
+                "CoinGecko 歷史報價失敗（%s），改用 yfinance: %s", symbol, e
+            )
+            return await self._yfinance_historical(symbol, timeframe)
+
+    async def _yfinance_historical(
+        self, symbol: str, timeframe: str
+    ) -> list[HistoricalPrice]:
+        """以 yfinance 取得 SYMBOL-USD 的加密貨幣歷史報價"""
+        import asyncio
+
+        base = symbol.upper()
+        for suffix in ("-USD", "-USDT", "-TWD"):
+            if base.endswith(suffix):
+                base = base[: -len(suffix)]
+                break
+        period = {"1M": "1mo", "3M": "3mo", "1Y": "1y", "5Y": "5y"}.get(
+            timeframe, "1mo"
+        )
+
+        def _fetch() -> list[HistoricalPrice]:
+            import yfinance as yf
+            df = yf.Ticker(f"{base}-USD").history(period=period)
+            if df.empty:
+                return []
+            return [
+                HistoricalPrice(
+                    symbol=symbol.upper(),
+                    date=idx.to_pydatetime(),
+                    open_price=Decimal(str(round(row["Open"], 8))),
+                    high=Decimal(str(round(row["High"], 8))),
+                    low=Decimal(str(round(row["Low"], 8))),
+                    close=Decimal(str(round(row["Close"], 8))),
+                )
+                for idx, row in df.iterrows()
+            ]
+
+        loop = asyncio.get_event_loop()
+        try:
+            return await loop.run_in_executor(None, _fetch)
+        except Exception as e:
+            logger.warning("yfinance 加密貨幣歷史報價亦失敗: %s", e)
+            return []
 
     async def validate_symbol(self, symbol: str) -> bool:
         """驗證加密貨幣代碼"""
