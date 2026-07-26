@@ -258,6 +258,69 @@ class TransactionService:
         await self.db.flush()
         await self._invalidate_snapshots(position.portfolio_id, now.date())
 
+    async def heal_liability_positions(self, portfolio_id: str) -> int:
+        """核對並自我修復負債部位的數量漂移。
+
+        負債部位數量應恆等於交易帳的存提差額（單價固定 1）。
+        若持倉列與交易帳不一致（歷史 bug 或並發殘留），自動校正
+        並記 log 供追查根因。回傳修正的部位數。
+        """
+        from sqlalchemy import case
+        from app.models.asset_category import AssetCategory
+
+        expected_stmt = (
+            select(
+                Transaction.symbol,
+                func.sum(
+                    case(
+                        (
+                            Transaction.tx_type.in_([
+                                TransactionType.BUY,
+                                TransactionType.DEPOSIT,
+                                TransactionType.DIVIDEND,
+                            ]),
+                            Transaction.quantity,
+                        ),
+                        else_=-Transaction.quantity,
+                    )
+                ).label("expected"),
+            )
+            .join(AssetCategory, Transaction.category_id == AssetCategory.id)
+            .where(Transaction.portfolio_id == portfolio_id)
+            .where(AssetCategory.slug == "liability")
+            .group_by(Transaction.symbol)
+        )
+        rows = (await self.db.execute(expected_stmt)).all()
+        if not rows:
+            return 0
+
+        healed = 0
+        for symbol, expected in rows:
+            expected = expected or Decimal("0")
+            pos_stmt = (
+                select(CurrentPosition)
+                .where(CurrentPosition.portfolio_id == portfolio_id)
+                .where(CurrentPosition.symbol == symbol)
+            )
+            position = (await self.db.execute(pos_stmt)).scalar_one_or_none()
+            if not position:
+                continue
+            if (
+                position.total_quantity != expected
+                or position.avg_cost != Decimal("1")
+            ):
+                logger.warning(
+                    "負債部位 %s 漂移自動修復：數量 %s → %s（成本 %s → 1）",
+                    symbol, position.total_quantity, expected, position.avg_cost,
+                )
+                position.total_quantity = expected
+                position.avg_cost = Decimal("1")
+                position.updated_at = func.now()
+                healed += 1
+        if healed:
+            await self.db.flush()
+        return healed
+
     async def recalculate_position(self, portfolio_id: str, symbol: str) -> None:
         """
         全量重新計算特定標的之持倉成本與每筆賣出之實現損益

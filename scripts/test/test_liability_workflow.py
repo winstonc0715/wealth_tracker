@@ -348,6 +348,25 @@ async def main() -> None:
             f"入帳日應校正為撥款日，實際 {deposit_tx.executed_at.date()}"
         print("✅ 情境 13：舊資料入帳日自動校正為撥款日")
 
+        # === 14. 負債部位漂移自我修復 ===
+        pos3 = (await session.execute(
+            select(CurrentPosition).where(CurrentPosition.symbol == li3.symbol)
+        )).scalar_one()
+        correct_qty = pos3.total_quantity
+        pos3.total_quantity = correct_qty + Decimal("275369")  # 模擬漂移
+        pos3.avg_cost = Decimal("1.8140")
+        await session.flush()
+
+        healed = await tx_service.heal_liability_positions(p.id)
+        assert healed >= 1, "應偵測到並修復漂移的負債部位"
+        await session.refresh(pos3)
+        assert pos3.total_quantity == correct_qty, \
+            f"數量應修復為 {correct_qty}，實際 {pos3.total_quantity}"
+        assert pos3.avg_cost == Decimal("1")
+        # 無漂移時為 no-op
+        assert await tx_service.heal_liability_positions(p.id) == 0
+        print("✅ 情境 14：負債部位漂移 → 載入時自動修復（數量/成本歸正）")
+
     print("\n🎉 全部通過")
 
 

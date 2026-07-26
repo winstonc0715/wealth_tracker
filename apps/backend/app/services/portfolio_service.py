@@ -55,6 +55,13 @@ class PortfolioService:
         if not portfolio:
             raise ValueError(f"投資組合 {portfolio_id} 不存在")
 
+        # 自我修復：負債部位數量須與交易帳一致，偵測漂移即校正
+        from app.services.transaction_service import TransactionService
+        try:
+            await TransactionService(self.db).heal_liability_positions(portfolio_id)
+        except Exception as e:
+            logger.warning("負債部位自我修復失敗（不影響摘要）: %s", e)
+
         # 取得所有持倉 (僅顯示數量 > 0 的部位)
         stmt = (
             select(CurrentPosition)
