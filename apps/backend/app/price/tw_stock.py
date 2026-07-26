@@ -45,7 +45,7 @@ class TWStockProvider(PriceProvider):
             if not stock or not stock.get("success"):
                 # twstock 查詢失敗（常見於 ETF），改用 TWSE API
                 logger.warning(f"twstock 查詢 {stock_id} 失敗，切換至 TWSE API")
-                return self._fetch_from_twse(stock_id)
+                return self._fetch_with_fallback(stock_id)
 
             real_data = stock["realtime"]
             raw_price = real_data.get("latest_trade_price", "") or ""
@@ -66,7 +66,7 @@ class TWStockProvider(PriceProvider):
             if price == 0:
                 # 無成交價且無買價時 fallback 至 TWSE API
                 logger.warning(f"twstock {stock_id} 無成交價與試撮價，切換至 TWSE API")
-                return self._fetch_from_twse(stock_id)
+                return self._fetch_with_fallback(stock_id)
 
             # 計算漲跌幅
             yesterday_close = Decimal(str(real_data.get("open", price)))
@@ -88,11 +88,67 @@ class TWStockProvider(PriceProvider):
             )
         except ImportError:
             # twstock 未安裝時，透過 TWSE API 取得
-            return self._fetch_from_twse(stock_id)
+            return self._fetch_with_fallback(stock_id)
         except Exception as e:
             # 任何其他錯誤也 fallback 至 TWSE API
             logger.warning(f"twstock 查詢 {stock_id} 異常: {e}，切換至 TWSE API")
-            return self._fetch_from_twse(stock_id)
+            return self._fetch_with_fallback(stock_id)
+
+    def _fetch_with_fallback(self, stock_id: str) -> PriceData:
+        """
+        備援鏈：TWSE API → Yahoo Finance
+
+        TWSE mis API 對海外 IP（如 Render 伺服器）常回空值或拒絕，
+        且假日無成交價；Yahoo Finance 全球可用，作為最後防線。
+        """
+        try:
+            data = self._fetch_from_twse(stock_id)
+            if data.price > 0:
+                return data
+            logger.warning(f"TWSE 回報 {stock_id} 價格為 0，切換至 Yahoo Finance")
+        except Exception as e:
+            logger.warning(f"TWSE API 查詢 {stock_id} 失敗: {e}，切換至 Yahoo Finance")
+        return self._fetch_from_yahoo(stock_id)
+
+    def _fetch_from_yahoo(self, stock_id: str) -> PriceData:
+        """最後備援：透過 Yahoo Finance 取得台股報價（支援上市 .TW 與上櫃 .TWO）"""
+        import yfinance as yf
+
+        for suffix in (".TW", ".TWO"):
+            try:
+                ticker = yf.Ticker(f"{stock_id}{suffix}")
+                hist = ticker.history(period="5d")
+                if hist.empty:
+                    continue
+                closes = hist["Close"].dropna()
+                if closes.empty:
+                    continue
+                price = Decimal(str(round(float(closes.iloc[-1]), 4)))
+                if price <= 0:
+                    continue
+
+                change = None
+                change_pct = None
+                if len(closes) >= 2:
+                    prev = Decimal(str(round(float(closes.iloc[-2]), 4)))
+                    if prev > 0:
+                        change = price - prev
+                        change_pct = (change / prev) * 100
+
+                return PriceData(
+                    symbol=stock_id,
+                    price=price,
+                    currency="TWD",
+                    timestamp=datetime.now(),
+                    change_24h=change,
+                    change_pct_24h=change_pct,
+                    source="yahoo",
+                )
+            except Exception as e:
+                logger.warning(f"Yahoo Finance 查詢 {stock_id}{suffix} 失敗: {e}")
+                continue
+
+        raise PriceNotFoundError(f"找不到台股 {stock_id}（twstock/TWSE/Yahoo 皆失敗）")
 
     def _fetch_from_twse(self, stock_id: str) -> PriceData:
         """備用：透過證交所 API 取得報價"""
