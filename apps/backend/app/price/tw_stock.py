@@ -219,21 +219,46 @@ class TWStockProvider(PriceProvider):
     def _fetch_historical(
         self, symbol: str, timeframe: str
     ) -> list[HistoricalPrice]:
-        """同步取得台股歷史報價"""
+        """同步取得台股歷史報價。
+
+        以 yfinance 為主（twstock 與 TWSE 新回應格式不相容，
+        解析會拋 Data.__new__ TypeError），twstock 僅作備援。
+        """
         stock_id = symbol.replace(".TW", "").replace(".TWO", "")
 
+        # 1. yfinance（.TW 上市 → .TWO 上櫃）
+        try:
+            import yfinance as yf
+            period = {"1M": "1mo", "3M": "3mo", "1Y": "1y", "5Y": "5y"}.get(
+                timeframe, "1mo"
+            )
+            for suffix in (".TW", ".TWO"):
+                df = yf.Ticker(f"{stock_id}{suffix}").history(period=period)
+                if not df.empty:
+                    return [
+                        HistoricalPrice(
+                            symbol=stock_id,
+                            date=idx.to_pydatetime(),
+                            open_price=Decimal(str(round(row["Open"], 4))),
+                            high=Decimal(str(round(row["High"], 4))),
+                            low=Decimal(str(round(row["Low"], 4))),
+                            close=Decimal(str(round(row["Close"], 4))),
+                            volume=Decimal(str(round(row["Volume"], 0))),
+                        )
+                        for idx, row in df.iterrows()
+                    ]
+        except Exception as e:
+            logger.warning("yfinance 台股歷史報價失敗 %s: %s", stock_id, e)
+
+        # 2. twstock 備援（近 31 天）
         try:
             import twstock
             stock = twstock.Stock(stock_id)
-            # twstock 預設取得近 31 天資料
             data = stock.data
-
             if not data:
                 raise PriceNotFoundError(f"找不到台股 {stock_id} 歷史資料")
-
-            prices = []
-            for d in data:
-                prices.append(HistoricalPrice(
+            return [
+                HistoricalPrice(
                     symbol=stock_id,
                     date=d.date if isinstance(d.date, datetime) else datetime.combine(d.date, datetime.min.time()),
                     open_price=Decimal(str(d.open)),
@@ -241,10 +266,11 @@ class TWStockProvider(PriceProvider):
                     low=Decimal(str(d.low)),
                     close=Decimal(str(d.close)),
                     volume=Decimal(str(d.turnover)),
-                ))
-            return prices
-        except ImportError:
-            logger.warning("twstock 未安裝，台股歷史資料暫不可用")
+                )
+                for d in data
+            ]
+        except Exception as e:
+            logger.warning("twstock 歷史報價亦失敗 %s: %s", stock_id, e)
             return []
 
     async def get_market_detail(self, symbol: str) -> "MarketDetail":

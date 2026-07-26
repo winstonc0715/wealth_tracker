@@ -230,7 +230,14 @@ class PriceManager:
             return []
 
         try:
-            return await provider.get_historical_prices(symbol, timeframe)
+            # 逾時保護：外部 API 卡住時不能拖垮整個走勢圖請求
+            return await asyncio.wait_for(
+                provider.get_historical_prices(symbol, timeframe),
+                timeout=20.0,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("取得 %s 的歷史報價逾時（20s）", symbol)
+            return []
         except Exception as e:
             logger.warning("取得 %s 的歷史報價失敗: %s", symbol, e)
             return []

@@ -30,7 +30,7 @@ const PERIOD_DAYS: Record<string, number> = {
 };
 
 export default function NetWorthChart({ data }: NetWorthChartProps) {
-    const { selectedPortfolio, fetchHistory, displayCurrency, exchangeRate, historyDays, setHistoryDays } = usePortfolioStore();
+    const { selectedPortfolio, fetchHistory, displayCurrency, exchangeRate, historyDays, setHistoryDays, isLoading, error } = usePortfolioStore();
 
     // 從 historyDays 反推 activePeriod
     let activePeriod = '1M';
@@ -61,9 +61,23 @@ export default function NetWorthChart({ data }: NetWorthChartProps) {
     };
 
     if (!data || data.length === 0) {
+        // 區分「載入中 / 載入失敗 / 真的沒資料」，避免全部顯示成「暫無資料」
         return (
-            <div className="card" style={{ height: '350px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <p style={{ color: 'var(--color-text-muted)' }}>暫無淨值歷史資料</p>
+            <div className="card" style={{ height: '350px', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center', justifyContent: 'center' }}>
+                {isLoading ? (
+                    <p style={{ color: 'var(--color-text-muted)' }}>⏳ 走勢圖計算中...</p>
+                ) : error ? (
+                    <>
+                        <p style={{ color: 'var(--color-loss)' }}>走勢圖載入失敗</p>
+                        <p style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>{error}</p>
+                        <button className="btn-secondary" style={{ padding: '4px 12px', fontSize: '0.8rem' }}
+                            onClick={() => selectedPortfolio && fetchHistory(selectedPortfolio.id, historyDays)}>
+                            重試
+                        </button>
+                    </>
+                ) : (
+                    <p style={{ color: 'var(--color-text-muted)' }}>暫無淨值歷史資料</p>
+                )}
             </div>
         );
     }
