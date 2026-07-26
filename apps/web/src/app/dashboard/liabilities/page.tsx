@@ -58,6 +58,19 @@ export default function LiabilitiesPage() {
     // 自動補登
     const [backfillingId, setBackfillingId] = useState<string | null>(null);
 
+    // 編輯負債 Modal
+    const [editingLiability, setEditingLiability] = useState<Liability | null>(null);
+    const [editName, setEditName] = useState('');
+    const [editPrincipal, setEditPrincipal] = useState('');
+    const [editCycle, setEditCycle] = useState<'weekly' | 'biweekly' | 'monthly' | 'quarterly'>('monthly');
+    const [editPeriods, setEditPeriods] = useState('');
+    const [editAmount, setEditAmount] = useState('');
+    const [editPaymentDay, setEditPaymentDay] = useState('');
+    const [editStartDate, setEditStartDate] = useState('');
+    const [editNote, setEditNote] = useState('');
+    const [editLoading, setEditLoading] = useState(false);
+    const [editError, setEditError] = useState('');
+
     const fetchLiabilities = useCallback(async () => {
         if (!selectedPortfolio) return;
         setIsLoading(true);
@@ -135,6 +148,55 @@ export default function LiabilitiesPage() {
             setError((err as Error).message);
         } finally {
             setBackfillingId(null);
+        }
+    };
+
+    const openEditModal = (li: Liability) => {
+        setEditingLiability(li);
+        setEditName(li.name);
+        setEditPrincipal(String(li.principal));
+        setEditCycle(li.payment_cycle);
+        setEditPeriods(String(li.total_periods));
+        setEditAmount(String(li.payment_amount));
+        setEditPaymentDay(li.payment_day != null ? String(li.payment_day) : '');
+        setEditStartDate(li.start_date || '');
+        setEditNote(li.note || '');
+        setEditError('');
+    };
+
+    const handleEditSave = async () => {
+        if (!editingLiability) return;
+        if (!editName.trim() || !editPrincipal || !editPeriods || !editAmount) {
+            setEditError('請填寫名稱、總金額、期數與每期金額');
+            return;
+        }
+        const principal = parseFloat(editPrincipal);
+        const periods = parseInt(editPeriods, 10);
+        const amount = parseFloat(editAmount);
+        if (principal <= 0 || periods <= 0 || amount <= 0) {
+            setEditError('金額與期數必須大於 0');
+            return;
+        }
+        setEditLoading(true);
+        setEditError('');
+        try {
+            await apiClient.updateLiability(editingLiability.id, {
+                name: editName.trim(),
+                principal,
+                payment_cycle: editCycle,
+                total_periods: periods,
+                payment_amount: amount,
+                payment_day: editPaymentDay ? parseInt(editPaymentDay, 10) : undefined,
+                start_date: editStartDate || undefined,
+                note: editNote || undefined,
+            });
+            setEditingLiability(null);
+            flash('✅ 負債設定已更新');
+            await Promise.all([fetchLiabilities(), refreshAll()]);
+        } catch (err) {
+            setEditError((err as Error).message);
+        } finally {
+            setEditLoading(false);
         }
     };
 
@@ -346,6 +408,11 @@ export default function LiabilitiesPage() {
                                                     <Banknote size={14} /> 記錄還款
                                                 </button>
                                             )}
+                                            <button className="btn-secondary" style={{ padding: '6px 10px', fontSize: '0.8rem' }}
+                                                title="編輯負債設定"
+                                                onClick={() => openEditModal(li)}>
+                                                <Pencil size={14} />
+                                            </button>
                                             <button className="btn-secondary" style={{ padding: '6px 10px', fontSize: '0.8rem' }}
                                                 onClick={() => handleDelete(li)}>
                                                 <Trash2 size={14} />
@@ -610,6 +677,101 @@ export default function LiabilitiesPage() {
                             <button className="btn-primary" onClick={handlePay} disabled={payLoading}
                                 style={{ opacity: payLoading ? 0.6 : 1, minWidth: '110px' }}>
                                 {payLoading ? '處理中...' : '確認還款'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ====== 編輯負債 Modal ====== */}
+            {editingLiability && (
+                <div style={{
+                    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    zIndex: 200, backdropFilter: 'blur(6px)',
+                }} onClick={() => setEditingLiability(null)}>
+                    <div className="card-glass" style={{ maxWidth: '480px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}
+                        onClick={(e) => e.stopPropagation()}>
+                        <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '20px' }}>
+                            <Pencil size={16} style={{ verticalAlign: '-2px', marginRight: '8px' }} />
+                            編輯負債 — {editingLiability.name}
+                        </h3>
+
+                        <label style={labelStyle}>名稱 *</label>
+                        <input className="input-field" style={{ marginBottom: '12px' }}
+                            value={editName} onChange={(e) => setEditName(e.target.value)} />
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                            <div>
+                                <label style={labelStyle}>負債總額（原始本金）*</label>
+                                <input className="input-field" type="number" step="any" min="0"
+                                    value={editPrincipal} onChange={(e) => setEditPrincipal(e.target.value)} />
+                            </div>
+                            <div>
+                                <label style={labelStyle}>每期還款金額 *</label>
+                                <input className="input-field" type="number" step="any" min="0"
+                                    value={editAmount} onChange={(e) => setEditAmount(e.target.value)} />
+                            </div>
+                        </div>
+
+                        <label style={labelStyle}>還款週期</label>
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                            {(Object.keys(CYCLE_LABELS) as Array<keyof typeof CYCLE_LABELS>).map((key) => (
+                                <button key={key} onClick={() => setEditCycle(key as typeof editCycle)} style={{
+                                    padding: '6px 14px', borderRadius: '8px', border: '1px solid',
+                                    borderColor: editCycle === key ? 'var(--color-primary)' : 'var(--color-border)',
+                                    background: editCycle === key ? 'rgba(99,102,241,0.15)' : 'var(--color-bg-secondary)',
+                                    color: editCycle === key ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                                    cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600,
+                                }}>
+                                    {CYCLE_LABELS[key]}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                            <div>
+                                <label style={labelStyle}>總期數 *</label>
+                                <input className="input-field" type="number" min="1"
+                                    value={editPeriods} onChange={(e) => setEditPeriods(e.target.value)} />
+                            </div>
+                            <div>
+                                <label style={labelStyle}>每期繳款日（1-31，選填）</label>
+                                <input className="input-field" type="number" min="1" max="31"
+                                    value={editPaymentDay} onChange={(e) => setEditPaymentDay(e.target.value)} />
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                            <div>
+                                <label style={labelStyle}>起始日／撥款日（選填）</label>
+                                <input className="input-field" type="date"
+                                    value={editStartDate} onChange={(e) => setEditStartDate(e.target.value)} />
+                            </div>
+                            <div>
+                                <label style={labelStyle}>備註</label>
+                                <input className="input-field" placeholder="選填"
+                                    value={editNote} onChange={(e) => setEditNote(e.target.value)} />
+                            </div>
+                        </div>
+
+                        <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginBottom: '14px' }}>
+                            調整起始日／週期／繳款日後，若與已補登的還款排程不符，卡片會出現提示，
+                            按「檢查並清理」即可自動重新對齊。剩餘金額請用卡片上「剩餘」旁的 ✎ 校正。
+                        </p>
+
+                        {editError && (
+                            <div style={{
+                                padding: '10px 14px', borderRadius: '8px', marginBottom: '12px',
+                                background: 'var(--color-loss-bg)', color: 'var(--color-loss)', fontSize: '0.9rem',
+                            }}>{editError}</div>
+                        )}
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                            <button className="btn-secondary" onClick={() => setEditingLiability(null)}>取消</button>
+                            <button className="btn-primary" onClick={handleEditSave} disabled={editLoading}
+                                style={{ opacity: editLoading ? 0.6 : 1, minWidth: '110px' }}>
+                                {editLoading ? '儲存中...' : '儲存變更'}
                             </button>
                         </div>
                     </div>

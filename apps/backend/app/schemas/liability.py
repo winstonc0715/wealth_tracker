@@ -29,6 +29,7 @@ class LiabilityCreate(BaseModel):
 class LiabilityUpdate(BaseModel):
     """更新負債請求"""
     name: str | None = Field(default=None, max_length=100)
+    principal: Decimal | None = Field(default=None, gt=0)
     payment_cycle: PaymentCycle | None = None
     total_periods: int | None = Field(default=None, gt=0, le=1200)
     payment_amount: Decimal | None = Field(default=None, gt=0)

@@ -367,6 +367,24 @@ async def main() -> None:
         assert await tx_service.heal_liability_positions(p.id) == 0
         print("✅ 情境 14：負債部位漂移 → 載入時自動修復（數量/成本歸正）")
 
+        # === 15. 編輯負債設定 ===
+        await service.update_liability(demo_user.id, li3.id, LiabilityUpdate(
+            name="信貸（整貸）",
+            principal=Decimal("150000"),
+            payment_amount=Decimal("12000"),
+            payment_day=5,
+            note="編輯測試",
+        ))
+        resp3 = await service.get_liability(demo_user.id, li3.id)
+        assert resp3.name == "信貸（整貸）"
+        assert resp3.principal == Decimal("150000")
+        assert resp3.payment_amount == Decimal("12000")
+        assert resp3.payment_day == 5
+        assert resp3.note == "編輯測試"
+        # 進度依新本金重算；還款紀錄不受影響
+        assert resp3.paid_periods == 6
+        print("✅ 情境 15：編輯負債設定 → 欄位更新、還款紀錄不受影響")
+
     print("\n🎉 全部通過")
 
 
