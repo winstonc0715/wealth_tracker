@@ -13,7 +13,7 @@ import type { Liability } from '@/lib/api-client';
 import { usePortfolioStore } from '@/stores/portfolio-store';
 import {
     ArrowLeft, Plus, Trash2, Banknote, CalendarClock,
-    CheckCircle2, ChevronDown, ChevronUp, Loader2, History,
+    CheckCircle2, ChevronDown, ChevronUp, Loader2, History, Pencil,
 } from 'lucide-react';
 
 const CYCLE_LABELS: Record<string, string> = {
@@ -42,6 +42,7 @@ export default function LiabilitiesPage() {
     const [formAmount, setFormAmount] = useState('');
     const [formPaymentDay, setFormPaymentDay] = useState('');
     const [formStartDate, setFormStartDate] = useState('');
+    const [formRemaining, setFormRemaining] = useState('');
     const [formNote, setFormNote] = useState('');
     const [formLoading, setFormLoading] = useState(false);
     const [formError, setFormError] = useState('');
@@ -97,6 +98,7 @@ export default function LiabilitiesPage() {
         setFormAmount('');
         setFormPaymentDay('');
         setFormStartDate('');
+        setFormRemaining('');
         setFormNote('');
         setFormError('');
     };
@@ -136,6 +138,26 @@ export default function LiabilitiesPage() {
         }
     };
 
+    const handleAdjustBalance = async (li: Liability) => {
+        const input = prompt(
+            `輸入「${li.name}」目前的剩餘金額（例如銀行 App 顯示的剩餘本金）：\n系統會建立一筆「餘額校正」調整，不影響已有的還款紀錄。`,
+            String(li.outstanding_balance),
+        );
+        if (input === null) return;
+        const value = parseFloat(input.replace(/,/g, ''));
+        if (isNaN(value) || value < 0) {
+            setError('剩餘金額必須是不小於 0 的數字');
+            return;
+        }
+        try {
+            await apiClient.updateLiability(li.id, { outstanding_balance: value });
+            flash('✅ 餘額已校正');
+            await Promise.all([fetchLiabilities(), refreshAll()]);
+        } catch (err) {
+            setError((err as Error).message);
+        }
+    };
+
     const handleCreate = async () => {
         if (!selectedPortfolio) return;
         if (!formName.trim() || !formPrincipal || !formPeriods || !formAmount) {
@@ -156,6 +178,7 @@ export default function LiabilitiesPage() {
                 start_date: formStartDate || undefined,
                 note: formNote || undefined,
             });
+            const remainingInput = formRemaining ? parseFloat(formRemaining.replace(/,/g, '')) : NaN;
             setShowCreateModal(false);
             resetForm();
             flash('✅ 負債已建立');
@@ -163,6 +186,11 @@ export default function LiabilitiesPage() {
             // 起始日在過去 → 詢問是否依日期自動補登過往還款
             if (created.expected_periods > created.paid_periods) {
                 await handleBackfill(created);
+            }
+            // 有填目前剩餘金額 → 補登後校正餘額對齊銀行數字
+            if (!isNaN(remainingInput) && remainingInput >= 0) {
+                await apiClient.updateLiability(created.id, { outstanding_balance: remainingInput });
+                await Promise.all([fetchLiabilities(), refreshAll()]);
             }
         } catch (err) {
             setFormError((err as Error).message);
@@ -348,8 +376,16 @@ export default function LiabilitiesPage() {
                                             }} />
                                         </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginTop: '6px' }}>
-                                            <span style={{ color: 'var(--color-text-muted)' }}>
+                                            <span style={{ color: 'var(--color-text-muted)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                                                 剩餘 <span style={{ color: 'var(--color-loss)', fontWeight: 700 }}>{fmtMoney(li.outstanding_balance, li.currency)}</span>
+                                                {li.is_active && (
+                                                    <button onClick={() => handleAdjustBalance(li)} title="校正剩餘金額（對齊銀行數字）" style={{
+                                                        background: 'none', border: 'none', cursor: 'pointer',
+                                                        color: 'var(--color-text-muted)', padding: '2px', display: 'inline-flex',
+                                                    }}>
+                                                        <Pencil size={11} />
+                                                    </button>
+                                                )}
                                             </span>
                                             <span style={{ color: 'var(--color-text-muted)' }}>
                                                 總額 {fmtMoney(li.principal, li.currency)}
@@ -491,7 +527,7 @@ export default function LiabilitiesPage() {
                             </div>
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                             <div>
                                 <label style={labelStyle}>起始日／撥款日（選填）</label>
                                 <input className="input-field" type="date"
@@ -503,6 +539,11 @@ export default function LiabilitiesPage() {
                                     value={formNote} onChange={(e) => setFormNote(e.target.value)} />
                             </div>
                         </div>
+
+                        <label style={labelStyle}>目前剩餘金額（選填，對齊銀行剩餘本金）</label>
+                        <input className="input-field" type="number" step="any" min="0" style={{ marginBottom: '16px' }}
+                            placeholder="如銀行 App 顯示 338340；留空則依本金與還款紀錄計算"
+                            value={formRemaining} onChange={(e) => setFormRemaining(e.target.value)} />
 
                         <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginBottom: '14px' }}>
                             建立後會自動在持倉中新增等額的負債部位，總負債與淨值即時反映;每次記錄還款會自動沖減餘額。

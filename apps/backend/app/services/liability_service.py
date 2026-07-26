@@ -152,10 +152,50 @@ class LiabilityService:
     ) -> Liability:
         liability = await self._get_user_liability(user_id, liability_id)
         update_data = data.model_dump(exclude_unset=True)
+        # outstanding_balance 不是欄位，是「校正餘額」動作
+        target_balance = update_data.pop("outstanding_balance", None)
         for key, value in update_data.items():
             setattr(liability, key, value)
+        if target_balance is not None:
+            await self._adjust_outstanding(liability, target_balance)
         await self.db.flush()
         return liability
+
+    async def _adjust_outstanding(
+        self, liability: Liability, target: Decimal
+    ) -> None:
+        """把負債餘額校正為指定金額。
+
+        以一筆調整交易（存入/提出）補足差額，不動任何還款紀錄；
+        校正為 0 視為結清，大於 0 恢復進行中。
+        """
+        position = await self._get_position(
+            liability.portfolio_id, liability.symbol
+        )
+        current = position.total_quantity if position else Decimal("0")
+        diff = target - current
+        if diff != 0:
+            tx_service = TransactionService(self.db)
+            await tx_service.create_transaction(TransactionCreate(
+                portfolio_id=liability.portfolio_id,
+                category_id=await self._liability_category_id(),
+                symbol=liability.symbol,
+                asset_name=liability.name,
+                tx_type=(
+                    TransactionType.DEPOSIT if diff > 0
+                    else TransactionType.WITHDRAW
+                ),
+                quantity=abs(diff),
+                unit_price=Decimal("1"),
+                fee=Decimal("0"),
+                currency=liability.currency,
+                executed_at=datetime.now(timezone.utc),
+                note=f"餘額校正「{liability.name}」",
+            ))
+            logger.info(
+                "負債「%s」餘額校正：%s → %s", liability.name, current, target
+            )
+        liability.is_active = target > 0
 
     async def delete_liability(self, user_id: str, liability_id: str) -> None:
         """刪除負債主檔（保留交易紀錄與持倉）"""

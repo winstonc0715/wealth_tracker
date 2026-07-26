@@ -39,7 +39,7 @@ from app.models.portfolio import Portfolio  # noqa: E402
 from app.models.position import CurrentPosition  # noqa: E402
 from app.models.transaction import Transaction, TransactionType  # noqa: E402
 from app.models.user import User  # noqa: E402
-from app.schemas.liability import LiabilityCreate, PaymentCreate  # noqa: E402
+from app.schemas.liability import LiabilityCreate, LiabilityUpdate, PaymentCreate  # noqa: E402
 from app.schemas.transaction import TransactionCreate  # noqa: E402
 from app.services.liability_service import LiabilityService, _add_cycle  # noqa: E402
 from app.services.transaction_service import TransactionService  # noqa: E402
@@ -292,6 +292,29 @@ async def main() -> None:
             f"重算後餘額應為 69000，實際 {resp3.outstanding_balance}"
         assert any(pm.id == manual.id for pm in resp3.payments), "手動還款不應被清除"
         print("✅ 情境 10：清理排程錯位的自動補登 → 手動紀錄保留、餘額重算正確")
+
+        # === 11. 餘額校正（對齊銀行剩餘本金） ===
+        before = await service.get_liability(demo_user.id, li3.id)
+        assert before.outstanding_balance == Decimal("69000")
+        await service.update_liability(demo_user.id, li3.id, LiabilityUpdate(
+            outstanding_balance=Decimal("72500"),  # 銀行含息剩餘本金較高
+        ))
+        after = await service.get_liability(demo_user.id, li3.id)
+        assert after.outstanding_balance == Decimal("72500"), \
+            f"校正後餘額應為 72500，實際 {after.outstanding_balance}"
+        # 還款紀錄與統計不受影響
+        assert after.paid_periods == before.paid_periods
+        assert after.paid_amount == before.paid_amount
+        # 校正為 0 → 結清；再調高 → 恢復進行中
+        await service.update_liability(demo_user.id, li3.id, LiabilityUpdate(
+            outstanding_balance=Decimal("0"),
+        ))
+        assert (await service.get_liability(demo_user.id, li3.id)).is_active is False
+        await service.update_liability(demo_user.id, li3.id, LiabilityUpdate(
+            outstanding_balance=Decimal("72500"),
+        ))
+        assert (await service.get_liability(demo_user.id, li3.id)).is_active is True
+        print("✅ 情境 11：餘額校正 → 對齊指定金額、還款統計不變、結清狀態正確")
 
     print("\n🎉 全部通過")
 

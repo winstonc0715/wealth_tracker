@@ -417,7 +417,7 @@ class ApiClient {
         return res.data;
     }
 
-    async updateLiability(id: string, data: Partial<LiabilityInput> & { is_active?: boolean }): Promise<Liability> {
+    async updateLiability(id: string, data: Partial<LiabilityInput> & { is_active?: boolean; outstanding_balance?: number }): Promise<Liability> {
         const res = await this.request<Liability>(`/liabilities/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
         if (!res.data) throw new Error('更新負債失敗');
         return res.data;

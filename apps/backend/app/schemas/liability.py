@@ -36,6 +36,8 @@ class LiabilityUpdate(BaseModel):
     start_date: date | None = None
     note: str | None = Field(default=None, max_length=500)
     is_active: bool | None = None
+    # 直接校正剩餘金額（如對齊銀行剩餘本金）；會建立調整交易，不影響還款紀錄
+    outstanding_balance: Decimal | None = Field(default=None, ge=0)
 
 
 class PaymentCreate(BaseModel):
